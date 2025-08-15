@@ -1,0 +1,17 @@
+name = "tricloud-drive"
+main = "./.output/server/index.mjs"
+compatibility_date = "2025-07-15"
+
+[vars]
+# This will be used for session encryption
+SESSION_SECRET = "a_secure_random_string_for_sessions"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "" # Your D1 database name
+database_id = "" # Your D1 database id
+preview_database_id = "" # Optional: for use with wrangler dev --remote
+
+# Local development configuration
+[dev]
+port = 3000
