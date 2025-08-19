@@ -60,37 +60,36 @@
       </div>
 
       <div v-else class="px-4 py-6 sm:px-0">
-        <div class="border-4 border-dashed border-gray-200 rounded-lg p-8">
-          <div class="text-center">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">
-              欢迎回来！
-            </h2>
-            <div class="bg-white shadow rounded-lg p-6 max-w-md mx-auto">
-              <h3 class="text-lg font-medium text-gray-900 mb-4">
-                账户信息
-              </h3>
-              <dl class="space-y-3">
-                <div>
-                  <dt class="text-sm font-medium text-gray-500">邮箱</dt>
-                  <dd class="text-sm text-gray-900">{{ user?.email }}</dd>
-                </div>
-                <div>
-                  <dt class="text-sm font-medium text-gray-500">注册时间</dt>
-                  <dd class="text-sm text-gray-900">
-                    {{ formatToUTC8(user?.created_at) }}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-sm font-medium text-gray-500">用户ID</dt>
-                  <dd class="text-sm text-gray-900">{{ user?.id }}</dd>
-                </div>
-              </dl>
-            </div>
-            <p class="mt-6 text-gray-600">
-              云存储功能正在开发中...
-            </p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <!-- 用户信息 -->
+          <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">
+              账户信息
+            </h3>
+            <dl class="space-y-3">
+              <div>
+                <dt class="text-sm font-medium text-gray-500">邮箱</dt>
+                <dd class="text-sm text-gray-900">{{ user?.email }}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">注册时间</dt>
+                <dd class="text-sm text-gray-900">
+                  {{ formatToUTC8(user?.created_at) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">用户ID</dt>
+                <dd class="text-sm text-gray-900">{{ user?.id }}</dd>
+              </div>
+            </dl>
           </div>
+
+          <!-- 文件上传 -->
+          <FileUpload @uploaded="handleFileUploaded" />
         </div>
+
+        <!-- 文件列表 -->
+        <FileList ref="fileListRef" />
       </div>
     </main>
   </div>
@@ -99,8 +98,17 @@
 <script setup lang="ts">
 const { user, isLoggedIn, logout } = useAuth()
 
+const fileListRef = ref()
+
 const handleLogout = async () => {
   await logout()
+}
+
+const handleFileUploaded = () => {
+  // 当文件上传完成后，刷新文件列表
+  if (fileListRef.value) {
+    fileListRef.value.refreshFiles()
+  }
 }
 
 import { formatToUTC8 } from '~/server/utils/time'

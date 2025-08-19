@@ -24,6 +24,5 @@ logs
 !.env.example
 
 # Cloudflare
-# .wrangler folder
 .wrangler
 wrangler.toml

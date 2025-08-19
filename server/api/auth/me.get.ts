@@ -1,26 +1,10 @@
 import { UserService } from '~/server/utils/db'
-import { verifyToken } from '~/server/utils/auth'
+import { requireAuth } from '~/server/utils/auth-middleware'
 
 export default defineEventHandler(async (event) => {
   try {
-    // 获取认证 token
-    const token = getCookie(event, 'auth-token')
-    if (!token) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: '未登录'
-      })
-    }
-
-    // 验证 token
-    const config = useRuntimeConfig()
-    const decoded = verifyToken(token, config.sessionSecret)
-    if (!decoded) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: '登录已过期'
-      })
-    }
+    // 验证用户认证
+    const authUser = await requireAuth(event)
 
     // 获取数据库连接
     const db = event.context.cloudflare?.env?.DB
@@ -34,7 +18,7 @@ export default defineEventHandler(async (event) => {
     const userService = new UserService(db)
 
     // 获取用户信息
-    const user = await userService.getUserById(decoded.userId)
+    const user = await userService.getUserById(authUser.userId)
     if (!user) {
       throw createError({
         statusCode: 404,
