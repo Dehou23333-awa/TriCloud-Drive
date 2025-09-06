@@ -17,6 +17,7 @@
     "cos-nodejs-sdk-v5": "^2.15.4",
     "jsonwebtoken": "^9.0.2",
     "nuxt": "^3.18.1",
+    "sqlite3": "^5.1.7",
     "tencentcloud-sdk-nodejs": "^4.1.99",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"

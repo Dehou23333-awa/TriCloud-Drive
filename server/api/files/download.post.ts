@@ -1,5 +1,6 @@
 import { requireAuth } from '~/server/utils/auth-middleware'
 import crypto from 'crypto'
+import { getDb } from '~/server/utils/db-adapter'
 
 // 生成 CDN 鉴权 URL (TypeA)
 const generateCDNUrl = (
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig()
     
     // 检查文件是否属于当前用户
-    const db = event.context.cloudflare?.env?.DB
+    const db = getDb(event)
     if (!db) {
       throw createError({
         statusCode: 500,

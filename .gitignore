@@ -26,3 +26,7 @@ logs
 # Cloudflare
 .wrangler
 wrangler.toml
+
+# database files
+*.sqlite
+*.sqlite3

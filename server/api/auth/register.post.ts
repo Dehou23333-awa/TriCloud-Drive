@@ -1,6 +1,6 @@
 import { UserService } from '~/server/utils/db'
 import { hashPassword, validateEmail, validatePassword } from '~/server/utils/auth'
-
+import { getDb } from '~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   if (getMethod(event) !== 'POST') {
     throw createError({
@@ -35,7 +35,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // 获取数据库连接
-    const db = event.context.cloudflare?.env?.DB
+    //const db = event.context.cloudflare?.env?.DB
+    const db = getDb(event)
     if (!db) {
       throw createError({
         statusCode: 500,
