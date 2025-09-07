@@ -1,13 +1,26 @@
-export default defineNuxtRouteMiddleware((to) => {
-  const { isLoggedIn } = useAuth()
-  //console.log(process.env.ALLOW_REGISTER)
-  if (process.env.ALLOW_REGISTER == 'false' && to.path === '/register'){
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { public: { allowRegister } } = useRuntimeConfig()
+  const auth = useAuth()
+
+  // 如果还没拉过用户信息（初始为 null），先尝试获取一次
+  if (auth.user.value === null) {
+    try { await auth.fetchUser() } catch { }
+  }
+
+  // 注册开关
+  if (allowRegister === false && to.path === '/register') {
     return navigateTo('/')
   }
-  // 如果用户未登录且访问的不是登录或注册页面，重定向到登录页
-  if (!isLoggedIn.value && to.path !== '/login' && to.path !== '/register' && to.path !== '/' 
-    && to.path !== '/loginnew'
-  ) {
+
+  const whitelist = new Set(['/', '/login', '/loginnew', '/register'])
+
+  // 未登录且不在白名单 => 去登录
+  if (!auth.isLoggedIn.value && !whitelist.has(to.path)) {
     return navigateTo('/login')
+  }
+
+  // 可选：已登录就别进登录/注册页
+  if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginnew' || to.path === '/register')) {
+    return navigateTo('/')
   }
 })

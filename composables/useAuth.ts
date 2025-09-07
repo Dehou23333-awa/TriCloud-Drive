@@ -1,14 +1,3 @@
-interface User {
-  id: number
-  email: string
-  created_at: string
-}
-
-interface AuthState {
-  user: User | null
-  isLoggedIn: boolean
-}
-
 export const useAuth = () => {
   const user = useState<User | null>('auth.user', () => null)
   const isLoggedIn = computed(() => !!user.value)
@@ -16,41 +5,37 @@ export const useAuth = () => {
   const login = async (email: string, password: string) => {
     const data = await $fetch<{ success: boolean; user: User; message: string }>('/api/auth/login', {
       method: 'POST',
-      body: { email, password }
+      body: { email, password },
+      credentials: 'include'
     })
-
-    if (data.success) {
-      user.value = data.user
-    }
-    
+    if (data.success) user.value = data.user
     return data
   }
 
   const register = async (email: string, password: string) => {
     const data = await $fetch<{ success: boolean; user: User; message: string }>('/api/auth/register', {
       method: 'POST',
-      body: { email, password }
+      body: { email, password },
+      credentials: 'include'
     })
-
     return data
   }
 
   const logout = async () => {
-    await $fetch('/api/auth/logout', {
-      method: 'POST'
-    })
-    
+    await $fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     user.value = null
     await navigateTo('/login')
   }
 
   const fetchUser = async () => {
     try {
-      const data = await $fetch<{ success: boolean; user: User }>('/api/auth/me')
-      if (data.success) {
-        user.value = data.user
-      }
-    } catch (error) {
+      const headers = process.server ? useRequestHeaders(['cookie']) : undefined
+      const data = await $fetch<{ success: boolean; user: User | null }>('/api/auth/me', {
+        headers,
+        credentials: 'include'
+      })
+      user.value = data.success ? data.user : null
+    } catch {
       user.value = null
     }
   }
