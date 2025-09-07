@@ -11,13 +11,10 @@ interface User {
   IsSuperAdmin: boolean;
 }
 
-// 定义响应接口
+// 定义响应接口（移除了分页相关的字段）
 interface ApiResponse {
   users: User[];
-  totalCount: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  totalCount: number; // 仍然保留总数，即使没有分页，知道总数也很有用
 }
 
 export default defineEventHandler(async (event) => {
@@ -27,9 +24,6 @@ export default defineEventHandler(async (event) => {
     
     // 获取查询参数
     const queryParams = getQuery(event);
-    const page = Number(queryParams.page) || 1;
-    const pageSize = Number(queryParams.pageSize) || 10;
-    const offset = (page - 1) * pageSize;
     
     // 构建基础SQL查询
     let sql = `
@@ -42,45 +36,35 @@ export default defineEventHandler(async (event) => {
     let countSql = `SELECT COUNT(*) as total FROM users WHERE 1=1`;
     
     // 添加筛选条件（按邮箱筛选）
-    const params = [];
+    const params = []; // 用于主查询的参数
+    const countParams = []; // 用于计数查询的参数
+    
     if (queryParams.email) {
       sql += ` AND email LIKE ?`;
       countSql += ` AND email LIKE ?`;
       params.push(`%${queryParams.email}%`);
+      countParams.push(`%${queryParams.email}%`);
     }
     
     // 添加排序
     sql += ` ORDER BY created_at DESC`;
     
-    // 添加分页
-    sql += ` LIMIT ? OFFSET ?`;
-    params.push(pageSize, offset);
-    
-    // 执行用户查询
+    // 执行用户查询（不再包含 LIMIT 和 OFFSET）
     const stmt = db.prepare(sql);
     const bindStmt = stmt.bind(...params);
     const usersResult = await bindStmt.all();
     const users = usersResult.results as User[];
     
     // 执行计数查询
-    const countParams = [];
-    if (queryParams.email) {
-      countParams.push(`%${queryParams.email}%`);
-    }
-    
     const countStmt = db.prepare(countSql);
     const bindCountStmt = countStmt.bind(...countParams);
     const countResult = await bindCountStmt.first() as { total: number };
     const totalCount = countResult.total;
-    const totalPages = Math.ceil(totalCount / pageSize);
     
-    // 构建响应
+    // 构建响应（移除了分页相关的字段）
     const response: ApiResponse = {
       users,
       totalCount,
-      page,
-      pageSize,
-      totalPages
     };
     
     return response;
