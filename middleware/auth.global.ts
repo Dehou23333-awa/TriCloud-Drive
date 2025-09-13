@@ -20,7 +20,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   // 可选：已登录就别进登录/注册页
-  if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginnew' || to.path === '/register')) {
+  if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginnew')) {
     return navigateTo('/')
+  }
+
+  if (!await auth.isAdminOrSuperAdmin() && to.path.startsWith('/api/manage') )
+  {
+    throw createError({ statusCode: 400, statusMessage: 'You are not authorized to access this page' })
   }
 })

@@ -41,15 +41,15 @@ export const useAuth = () => {
   }
   const isAdminOrSuperAdmin =  async () => {
     try {
-      console.log("check isAdminOrSuperAdmin")
+      //console.log("check isAdminOrSuperAdmin")
       const headers = process.server ? useRequestHeaders(['cookie']) : undefined
       const data = await $fetch<{ success: boolean; user: User | null }>('/api/auth/isAdminOrSuperAdmin', {
         headers,
         credentials: 'include'
       })
       if(data.success && data.user){
-        console.log(data.user.IsAdmin)
-        console.log(data.user.IsSuperAdmin)
+        //console.log(data.user.IsAdmin)
+        //console.log(data.user.IsSuperAdmin)
         return data.user.IsAdmin || data.user.IsSuperAdmin
         
       }
