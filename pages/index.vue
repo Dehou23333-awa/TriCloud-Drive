@@ -46,7 +46,7 @@
             欢迎来到 TriCloud Drive
           </h2>
           <p class="mt-4 text-lg text-gray-600">
-            安全、可靠的云存储解决方案
+            不安全、不可靠的云存储解决方案（bushi
           </p>
           <div class="mt-6">
             <NuxtLink
