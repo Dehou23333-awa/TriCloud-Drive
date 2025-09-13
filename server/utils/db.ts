@@ -4,7 +4,11 @@ export interface User {
   password_hash: string
   created_at: string
   IsAdmin: boolean
-IsSuperAdmin: boolean
+  IsSuperAdmin: boolean
+  usedStorage: number
+  maxStorage: number
+  usedDownload: number
+  maxDownload: number
 }
 
 export interface Database {

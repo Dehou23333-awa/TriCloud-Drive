@@ -9,6 +9,10 @@ interface User {
   created_at: string;
   IsAdmin: boolean;
   IsSuperAdmin: boolean;
+  usedStorage: number;
+  maxStorage: number;
+  usedDownload: number;
+  maxDownload: number;
 }
 
 // 定义响应接口（移除了分页相关的字段）
@@ -27,7 +31,7 @@ export default defineEventHandler(async (event) => {
     
     // 构建基础SQL查询
     let sql = `
-      SELECT id, email, created_at, IsAdmin, IsSuperAdmin 
+      SELECT id, email, created_at, IsAdmin, IsSuperAdmin, usedStorage, maxStorage, usedDownload, maxDownload
       FROM users 
       WHERE 1=1
     `;
@@ -60,6 +64,7 @@ export default defineEventHandler(async (event) => {
     const bindCountStmt = countStmt.bind(...countParams);
     const countResult = await bindCountStmt.first() as { total: number };
     const totalCount = countResult.total;
+    //console.log(`users: ${users.values}`);
     
     // 构建响应（移除了分页相关的字段）
     const response: ApiResponse = {

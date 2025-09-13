@@ -15,9 +15,6 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: '缺少用户ID' })
     }
 
-    // 这里建议做服务端鉴权与角色校验（仅管理员/超级管理员可以操作，且非超级管理员不可设置他人为超级管理员）
-    // 例如从 event.context.user 读取登录用户并检查权限（视你的鉴权实现而定）
-
     const db = getDb(event)
     const sql = `UPDATE users SET IsAdmin = ?, IsSuperAdmin = ? WHERE id = ?`
     const stmt = db.prepare(sql)

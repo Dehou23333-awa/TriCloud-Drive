@@ -7,7 +7,11 @@ CREATE TABLE users (
   password_hash TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   IsAdmin BOOLEAN DEFAULT 0,
-  IsSuperAdmin BOOLEAN DEFAULT 0
+  IsSuperAdmin BOOLEAN DEFAULT 0,
+  usedStorage INTEGER DEFAULT 0,
+  maxStorage INTEGER DEFAULT 0,
+  usedDownload INTEGER DEFAULT 0,
+  maxDownload INTEGER DEFAULT 0
 );
 
 CREATE TABLE files (

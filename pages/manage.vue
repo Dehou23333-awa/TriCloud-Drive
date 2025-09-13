@@ -183,6 +183,10 @@
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">注册时间</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">管理员</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">超级管理员</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">容量限制</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">容量已使用</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">下载限制</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">下载已使用</th>
                   <th class="px-6 py-3"></th>
                 </tr>
               </thead>
@@ -217,6 +221,10 @@
                       />
                     </div>
                   </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.maxStorage }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.usedStorage }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.maxDownload }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.usedDownload }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                     <button
                       @click="saveUser(u)"
@@ -254,7 +262,12 @@ type DbUser = {
   created_at: string
   IsAdmin: number | boolean
   IsSuperAdmin: number | boolean
+  usedStorage: number
+  maxStorage: number
+  usedDownload: number
+  maxDownload: number
 }
+
 
 const { user, isLoggedIn, logout, register, isAdminOrSuperAdmin } = useAuth()
 
@@ -334,7 +347,11 @@ const fetchUsers = async () => {
     users.value = (resp.users || []).map((u) => ({
       ...u,
       IsAdmin: !!u.IsAdmin,
-      IsSuperAdmin: !!u.IsSuperAdmin
+      IsSuperAdmin: !!u.IsSuperAdmin,
+      usedStorage: u.usedStorage,
+      maxStorage: u.maxStorage,
+      usedDownload: u.usedDownload,
+      maxDownload: u.maxDownload
     }))
     totalCount.value = resp.totalCount || 0
     lastRefreshed.value = new Date().toISOString()

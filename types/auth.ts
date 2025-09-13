@@ -4,6 +4,10 @@ export interface User {
   created_at: string
   isAdmin: boolean
   isSuperAdmin: boolean
+  usedStorage: number
+  maxStorage: number
+  usedDownload: number
+  maxDownload: number
 }
 
 export interface AuthResponse {
