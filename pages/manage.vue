@@ -217,13 +217,21 @@
                       />
                     </div>
                   </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                     <button
                       @click="saveUser(u)"
                       :disabled="updatingId === u.id"
                       class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-md text-sm border"
                     >
                       {{ updatingId === u.id ? '保存中...' : '保存' }}
+                    </button>
+
+                    <button
+                      @click="deleteUser(u)"
+                      :disabled="deletingId === u.id || disableDeleteFor(u)"
+                      class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md text-sm"
+                    >
+                      {{ deletingId === u.id ? '删除中...' : '删除' }}
                     </button>
                   </td>
                 </tr>
@@ -273,6 +281,43 @@ const addError = ref('')
 const updatingId = ref<number | null>(null)
 
 const canManage = ref(false)
+
+// 删除相关状态
+const deletingId = ref<number | null>(null)
+
+// 当前登录用户角色（用于前端控制按钮状态；最终以服务端为准）
+const isSuper = computed(() => !!user.value?.IsSuperAdmin)
+const isAdminOnly = computed(() => !!user.value?.IsAdmin && !isSuper.value)
+
+// 前端禁用删除的规则（仅前端保护，服务端仍严格校验）
+const disableDeleteFor = (u: DbUser) => {
+  // 禁止删自己
+  if (u.id === user.value?.id) return true
+  // 普通管理员不能删管理员或超管
+  if (isAdminOnly.value && (u.IsAdmin || u.IsSuperAdmin)) return true
+  return false
+}
+
+const deleteUser = async (u: DbUser) => {
+  if (disableDeleteFor(u)) return
+  const ok = window.confirm(`确认删除用户「${u.email}」及其全部文件吗？此操作不可恢复！`)
+  if (!ok) return
+
+  deletingId.value = u.id
+  try {
+    await $fetch('/api/manage/deleteUser', {
+      method: 'POST',
+      body: { id: u.id }
+    })
+    // 刷新列表
+    await fetchUsers()
+  } catch (err: any) {
+    const msg = err?.data?.statusMessage || '删除失败'
+    alert(msg)
+  } finally {
+    deletingId.value = null
+  }
+}
 //console.log('manage mounted2')
 onMounted(async () => {
     //console.log('manage mounted')
