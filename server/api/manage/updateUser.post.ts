@@ -9,16 +9,51 @@ export default defineEventHandler(async (event) => {
 
   try {
     const body = await readBody(event)
-    const { id, IsAdmin, IsSuperAdmin } = body || {}
+    const {
+      id,
+      IsAdmin,
+      IsSuperAdmin,
+      maxStorage,
+      usedStorage,
+      maxDownload,
+      usedDownload
+    } = body || {}
 
     if (!id && id !== 0) {
       throw createError({ statusCode: 400, statusMessage: '缺少用户ID' })
     }
 
+    // 基本数值清洗，确保为非负数
+    const toNonNegativeNumber = (v: any) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n >= 0 ? n : 0
+    }
+
     const db = getDb(event)
-    const sql = `UPDATE users SET IsAdmin = ?, IsSuperAdmin = ? WHERE id = ?`
+
+    const sql = `
+      UPDATE users
+      SET
+        IsAdmin = ?,
+        IsSuperAdmin = ?,
+        maxStorage = ?,
+        usedStorage = ?,
+        maxDownload = ?,
+        usedDownload = ?
+      WHERE id = ?
+    `
     const stmt = db.prepare(sql)
-    await stmt.bind(IsAdmin ? 1 : 0, IsSuperAdmin ? 1 : 0, id).run()
+    await stmt
+      .bind(
+        IsAdmin ? 1 : 0,
+        IsSuperAdmin ? 1 : 0,
+        toNonNegativeNumber(maxStorage),
+        toNonNegativeNumber(usedStorage),
+        toNonNegativeNumber(maxDownload),
+        toNonNegativeNumber(usedDownload),
+        id
+      )
+      .run()
 
     return { success: true }
   } catch (error) {

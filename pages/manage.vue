@@ -192,10 +192,10 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr v-if="loading">
-                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
+                  <td colspan="10" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
                 </tr>
                 <tr v-else-if="users.length === 0">
-                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
+                  <td colspan="10" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
                 </tr>
                 <tr v-for="u in users" :key="u.id">
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.id }}</td>
@@ -221,10 +221,55 @@
                       />
                     </div>
                   </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.maxStorage }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.usedStorage }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.maxDownload }}</td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.usedDownload }}</td>
+
+                  <!-- 容量限制（可编辑） -->
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="number"
+                      v-model.number="u.maxStorage"
+                      min="0"
+                      step="1"
+                      :disabled="updatingId === u.id"
+                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </td>
+
+                  <!-- 容量已使用（可编辑） -->
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="number"
+                      v-model.number="u.usedStorage"
+                      min="0"
+                      step="1"
+                      :disabled="updatingId === u.id"
+                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </td>
+
+                  <!-- 下载限制（可编辑） -->
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="number"
+                      v-model.number="u.maxDownload"
+                      min="0"
+                      step="1"
+                      :disabled="updatingId === u.id"
+                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </td>
+
+                  <!-- 下载已使用（可编辑） -->
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="number"
+                      v-model.number="u.usedDownload"
+                      min="0"
+                      step="1"
+                      :disabled="updatingId === u.id"
+                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </td>
+
                   <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                     <button
                       @click="saveUser(u)"
@@ -348,10 +393,10 @@ const fetchUsers = async () => {
       ...u,
       IsAdmin: !!u.IsAdmin,
       IsSuperAdmin: !!u.IsSuperAdmin,
-      usedStorage: u.usedStorage,
-      maxStorage: u.maxStorage,
-      usedDownload: u.usedDownload,
-      maxDownload: u.maxDownload
+      usedStorage: Number(u.usedStorage ?? 0),
+      maxStorage: Number(u.maxStorage ?? 0),
+      usedDownload: Number(u.usedDownload ?? 0),
+      maxDownload: Number(u.maxDownload ?? 0)
     }))
     totalCount.value = resp.totalCount || 0
     lastRefreshed.value = new Date().toISOString()
@@ -395,16 +440,24 @@ const handleAddUser = async () => {
 const saveUser = async (u: DbUser) => {
   try {
     updatingId.value = u.id
+
+    // 简单防御：不为负数
+    const payload = {
+      id: u.id,
+      IsAdmin: u.IsAdmin ? 1 : 0,
+      IsSuperAdmin: u.IsSuperAdmin ? 1 : 0,
+      maxStorage: Math.max(0, Number(u.maxStorage) || 0),
+      usedStorage: Math.max(0, Number(u.usedStorage) || 0),
+      maxDownload: Math.max(0, Number(u.maxDownload) || 0),
+      usedDownload: Math.max(0, Number(u.usedDownload) || 0)
+    }
+
     await $fetch('/api/manage/updateUser', {
       method: 'POST',
-      body: {
-        id: u.id,
-        IsAdmin: u.IsAdmin ? 1 : 0,
-        IsSuperAdmin: u.IsSuperAdmin ? 1 : 0
-      }
+      body: payload
     })
   } catch (err) {
-    console.error('更新用户权限失败:', err)
+    console.error('更新用户失败:', err)
     // 回滚
     await fetchUsers()
   } finally {
