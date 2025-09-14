@@ -16,6 +16,7 @@
     "cos-js-sdk-v5": "^1.10.1",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.14.5",
     "nuxt": "^3.18.1",
     "sqlite3": "^5.1.7",
     "tencentcloud-sdk-nodejs": "^4.1.99",
