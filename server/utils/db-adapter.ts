@@ -7,13 +7,15 @@ function isD1(db: any) {
 
 // 适配器统一接口
 export function getDb(event: any) {
+  const config = useRuntimeConfig()
+  
   // 优先 Cloudflare D1
   if (isD1(event.context.cloudflare?.env?.DB)) {
     return event.context.cloudflare.env.DB
   }
   // 本地 sqlite3
   if (!global.__sqliteDb) {
-    global.__sqliteDb = new sqlite3.Database(process.env.SQLITE_PATH || './data.sqlite')
+    global.__sqliteDb = new sqlite3.Database(config.dbPath)
   }
   return {
     prepare(sql: string) {

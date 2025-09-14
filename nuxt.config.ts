@@ -36,6 +36,7 @@ export default defineNuxtConfig({
     cdnAuthKeyBackup: process.env.CDN_AUTH_KEY_BACKUP || 'zU0Aa8tR34fwZHpE9zef76UbD05',
     cdnAuthTtl: parseInt(process.env.CDN_AUTH_TTL || '10'), // 默认10秒
     cdnAuthParam: process.env.CDN_AUTH_PARAM || 'sign',
+    dbPath: process.env.SQLITE_PATH || './data.sqlite',
     public: {
       apiBase: '',
       allowRegister: process.env.ALLOW_REGISTER === 'true'

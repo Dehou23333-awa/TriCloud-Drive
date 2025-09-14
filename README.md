@@ -1,6 +1,6 @@
 # TriCloud Drive
 
-基于 Nuxt 3 和 Cloudflare D1 的云存储应用，具备完整的用户认证功能。
+基于 Nuxt 3 ， Cloudflare D1/Sqlite3，腾讯云存储桶+CDN 的云存储应用，具备完整的用户认证功能。
 
 ## 功能特性
 
@@ -8,16 +8,19 @@
 - ✅ 基于 JWT 的认证系统
 - ✅ 密码加密存储
 - ✅ 响应式设计
-- ✅ Cloudflare D1 数据库集成
+- ✅ Cloudflare D1/ Sqlite3 数据库双兼容
+- ✅ 腾讯云存储桶+CDN 云存储
+- ✅ 用户下载和存储配额
+- 🚧 管理（开发中）
 - 🚧 文件上传下载（开发中）
 
 ## 技术栈
 
 - **前端**: Nuxt 3, Vue 3, TailwindCSS
 - **后端**: Nitro, Cloudflare Workers
-- **数据库**: Cloudflare D1 (SQLite)
+- **数据库**: Cloudflare D1 (SQLite)/Sqlite3
 - **认证**: JWT, bcrypt
-- **部署**: Cloudflare Pages
+- **云存储**: 腾讯云存储桶+CDN
 
 ## 本地开发
 
@@ -29,11 +32,34 @@ npm install
 
 ### 2. 初始化数据库
 
+- Sqlite3 数据库初始化
+
+```bash
+sqlite3 data.sqlite < ./server/database/schema.sql
+```
+**或**
+
+- Cloudflare D1 数据库初始化
+
 ```bash
 npx wrangler d1 execute tricloud-drive --local --file=server/database/schema.sql
 ```
 
-### 3. 启动开发服务器
+### 3. 配置环境变量
+
+```bash
+cp env.example .env
+```
+
+**或对于Windows用户**
+
+```batch
+copy env.example .env
+```
+
+并把.env 文件中的配置改成你自己的配置。
+
+### 4. 启动开发服务器
 
 ```bash
 npm run dev
@@ -50,6 +76,8 @@ npm run dev
 3. 确认密码
 4. 点击注册按钮
 
+> 如果你要关闭注册，请在.env 文件中设置 `ALLOW_REGISTER` 为 `false`
+
 ### 用户登录
 
 1. 访问 `/login` 页面
@@ -63,6 +91,18 @@ npm run dev
 - 自动检查认证状态
 - 提供退出登录功能
 
+### 退出登录
+
+1. 点击导航栏`退出登录`按钮。
+
+### 用户管理
+
+1. 访问 `/manage` 页面
+2. 可以搜索，添加，删除用户，也可以管理用户权限（待完善）
+
+> 用户注册时 `IsAdmin` 和 `IsSuperAdmin` 默认为 `false` 。管理员请手动修改数据库。之后就可以在管理页面修改其他用户权限。
+
+
 ## API 端点
 
 ### 认证 API
@@ -71,6 +111,7 @@ npm run dev
 - `POST /api/auth/login` - 用户登录
 - `POST /api/auth/logout` - 用户退出
 - `GET /api/auth/me` - 获取当前用户信息
+- `GET /api/auth/isAdminOrSuperAdmin` - 检查当前用户是否为管理员或超级管理员
 
 ### 请求格式
 
@@ -122,11 +163,17 @@ CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  IsAdmin BOOLEAN DEFAULT 0,
+  IsSuperAdmin BOOLEAN DEFAULT 0,
+  usedStorage INTEGER DEFAULT 0,
+  maxStorage INTEGER DEFAULT 1,
+  usedDownload INTEGER DEFAULT 0,
+  maxDownload INTEGER DEFAULT 1
 );
 ```
 
-## 部署到 Cloudflare
+## 部署到 Cloudflare(待完善)
 
 ### 1. 创建 D1 数据库
 
@@ -162,37 +209,3 @@ npx wrangler pages deploy dist
 - 输入验证和错误处理
 - 防止 SQL 注入（使用预处理语句）
 
-## 开发说明
-
-### 文件结构
-
-```
-├── composables/
-│   └── useAuth.ts          # 认证状态管理
-├── middleware/
-│   └── auth.ts             # 路由守卫
-├── pages/
-│   ├── index.vue           # 首页
-│   ├── login.vue           # 登录页
-│   └── register.vue        # 注册页
-├── plugins/
-│   └── auth.client.ts      # 客户端认证初始化
-├── server/
-│   ├── api/auth/
-│   │   ├── register.post.ts # 注册接口
-│   │   ├── login.post.ts    # 登录接口
-│   │   ├── logout.post.ts   # 退出接口
-│   │   └── me.get.ts        # 获取用户信息
-│   ├── database/
-│   │   └── schema.sql       # 数据库结构
-│   └── utils/
-│       ├── auth.ts          # 认证工具函数
-│       └── db.ts            # 数据库操作类
-└── wrangler.toml           # Cloudflare 配置
-```
-
-### 主要组件
-
-- `useAuth`: Composable 提供认证状态管理
-- `UserService`: 数据库操作服务类
-- JWT 认证: 基于令牌的无状态认证
