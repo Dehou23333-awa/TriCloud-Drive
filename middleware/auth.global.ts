@@ -12,7 +12,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/')
   }
 
-  const whitelist = new Set(['/', '/login', '/loginnew', '/register'])
+  const whitelist = new Set(['/', '/login', '/loginold', '/registerold', '/register'])
 
   // 未登录且不在白名单 => 去登录
   if (!auth.isLoggedIn.value && !whitelist.has(to.path)) {
@@ -20,7 +20,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   // 可选：已登录就别进登录/注册页
-  if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginnew')) {
+  if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginold')) {
     return navigateTo('/')
   }
 

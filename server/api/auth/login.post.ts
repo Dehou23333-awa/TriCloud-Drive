@@ -10,13 +10,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { email, username, password } = await readBody(event)
+    const { username, password } = await readBody(event)
 
     // 验证输入
-    if (!email || !password || !username) {
+    if (!password || !username) {
       throw createError({
         statusCode: 400,
-        statusMessage: '邮箱、用户名和密码暂时都是必填项'
+        statusMessage: '用户名和密码都是必填项'
       })
     }
 
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
     if (!isValidPassword) {
       throw createError({
         statusCode: 401,
-        statusMessage: '邮箱或密码错误'
+        statusMessage: '用户名或密码错误'
       })
     }
 

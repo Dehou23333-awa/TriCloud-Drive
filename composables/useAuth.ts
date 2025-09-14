@@ -2,10 +2,10 @@ export const useAuth = () => {
   const user = useState<User | null>('auth.user', () => null)
   const isLoggedIn = computed(() => !!user.value)
 
-  const login = async (email: string, username: string, password: string) => {
+  const login = async (username: string, password: string) => {
     const data = await $fetch<{ success: boolean; user: User; message: string }>('/api/auth/login', {
       method: 'POST',
-      body: { email, username, password },
+      body: { username, password },
       credentials: 'include'
     })
     if (data.success) user.value = data.user
