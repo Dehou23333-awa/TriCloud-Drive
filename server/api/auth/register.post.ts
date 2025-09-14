@@ -1,5 +1,5 @@
 import { UserService } from '~/server/utils/db'
-import { hashPassword, validateEmail, validatePassword } from '~/server/utils/auth'
+import { hashPassword, validateEmail, validatePassword, validateUsername } from '~/server/utils/auth'
 import { getDb } from '~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   if (getMethod(event) !== 'POST') {
@@ -10,13 +10,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { email, password } = await readBody(event)
+    const { email, username, password } = await readBody(event)
 
     // 验证输入
-    if (!email || !password) {
+    if (!email || !password || !username) {
       throw createError({
         statusCode: 400,
-        statusMessage: '邮箱和密码都是必填项'
+        statusMessage: '邮箱,用户名,密码暂时都是必填项'
       })
     }
 
@@ -33,6 +33,12 @@ export default defineEventHandler(async (event) => {
         statusMessage: '密码至少8位，且包含字母和数字'
       })
     }
+    if (!validateUsername(username)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: '用户名格式不正确,暂时只能包含大小写字母和数字'
+      })
+    }
 
     // 获取数据库连接
     //const db = event.context.cloudflare?.env?.DB
@@ -47,17 +53,17 @@ export default defineEventHandler(async (event) => {
     const userService = new UserService(db)
 
     // 检查用户是否已存在
-    const existingUser = await userService.getUserByEmail(email)
+    const existingUser = await userService.getUserByUsername(username)
     if (existingUser) {
       throw createError({
         statusCode: 409,
-        statusMessage: '该邮箱已被注册'
+        statusMessage: '该用户名已被注册'
       })
     }
 
     // 创建新用户
     const passwordHash = await hashPassword(password)
-    const newUser = await userService.createUser(email, passwordHash)
+    const newUser = await userService.createUser(email, username, passwordHash)
 
     if (!newUser) {
       throw createError({
@@ -72,6 +78,7 @@ export default defineEventHandler(async (event) => {
       user: {
         id: newUser.id,
         email: newUser.email,
+        username: newUser.username,
         created_at: newUser.created_at
       }
     }

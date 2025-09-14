@@ -110,7 +110,7 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    const result = await login(username.value, password.value)
+    const result = await login(username.value,"wcnm@sb.shitmountain",password.value)
     
     if (result.success) {
       showNotification('登录成功，正在跳转...', 'success')

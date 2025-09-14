@@ -1,5 +1,5 @@
 import { UserService } from '~/server/utils/db'
-import { verifyPassword, generateToken, validateEmail } from '~/server/utils/auth'
+import { verifyPassword, generateToken, validateEmail, validateUsername } from '~/server/utils/auth'
 import { getDb } from '~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   if (getMethod(event) !== 'POST') {
@@ -10,20 +10,20 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { email, password } = await readBody(event)
+    const { email, username, password } = await readBody(event)
 
     // 验证输入
-    if (!email || !password) {
+    if (!email || !password || !username) {
       throw createError({
         statusCode: 400,
-        statusMessage: '邮箱和密码都是必填项'
+        statusMessage: '邮箱、用户名和密码暂时都是必填项'
       })
     }
 
-    if (!validateEmail(email)) {
+    if (!validateUsername(username)) {
       throw createError({
         statusCode: 400,
-        statusMessage: '邮箱格式不正确'
+        statusMessage: '用户名格式不正确'
       })
     }
 
@@ -40,11 +40,11 @@ export default defineEventHandler(async (event) => {
     const userService = new UserService(db)
 
     // 查找用户
-    const user = await userService.getUserByEmail(email)
+    const user = await userService.getUserByUsername(username)
     if (!user) {
       throw createError({
         statusCode: 401,
-        statusMessage: '邮箱或密码错误'
+        statusMessage: '用户名或密码错误'
       })
     }
 
@@ -75,6 +75,7 @@ export default defineEventHandler(async (event) => {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         created_at: user.created_at
       }
     }

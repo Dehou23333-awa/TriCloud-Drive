@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
 
     // 查询目标用户
     const target = await db
-        .prepare('SELECT id, email, IsAdmin, IsSuperAdmin FROM users WHERE id = ?')
+        .prepare('SELECT id, email, username, IsAdmin, IsSuperAdmin FROM users WHERE id = ?')
         .bind(userId)
         .first()
 

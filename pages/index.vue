@@ -11,7 +11,7 @@
           </div>
           <div v-if="isLoggedIn" class="flex items-center space-x-4">
             <span class="text-gray-700">
-              欢迎，{{ user?.email }}
+              欢迎，{{ user?.username }}
             </span>
             <button
               @click="handleLogout"
@@ -66,10 +66,14 @@
             <h3 class="text-lg font-medium text-gray-900 mb-4">
               账户信息
             </h3>
-            <dl class="space-y-3">
+            <dl class="space-y-4">
               <div>
                 <dt class="text-sm font-medium text-gray-500">邮箱</dt>
                 <dd class="text-sm text-gray-900">{{ user?.email }}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">用户名</dt>
+                <dd class="text-sm text-gray-900">{{ user?.username }}</dd>
               </div>
               <div>
                 <dt class="text-sm font-medium text-gray-500">注册时间</dt>

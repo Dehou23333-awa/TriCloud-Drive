@@ -33,3 +33,10 @@ export function validatePassword(password: string): boolean {
   // 至少8位，包含字母和数字
   return password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password)
 }
+
+export function validateUsername(username: string): boolean {
+  // 只能包含字母和数字
+  const trimmed = username.trim()
+  const regex = /^[A-Za-z0-9]+$/
+  return regex.test(trimmed)
+}

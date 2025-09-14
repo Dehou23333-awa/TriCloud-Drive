@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8">
+    <div class="max-w-md w-full space-y-10">
       <div>
         <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
           创建新账户
@@ -15,8 +15,22 @@
           </NuxtLink>
         </p>
       </div>
-      <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
-        <div class="rounded-md shadow-sm -space-y-px">
+      <form class="mt-8 space-y-10" @submit.prevent="handleRegister">
+        <div class="rounded-md shadow-sm -space-y-px"> 
+        <div>
+          <div>
+            <label for="username" class="sr-only">用户名</label>
+            <input
+              id="username"
+              v-model="form.username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              required
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+              placeholder="用户名"
+            />
+          </div>
           <div>
             <label for="email" class="sr-only">邮箱地址</label>
             <input
@@ -26,7 +40,7 @@
               type="email"
               autocomplete="email"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
               placeholder="邮箱地址"
             />
           </div>
@@ -88,6 +102,7 @@
             <span v-else>注册</span>
           </button>
         </div>
+      </div>
       </form>
     </div>
   </div>
@@ -107,6 +122,7 @@ if (isLoggedIn.value) {
 
 const form = reactive({
   email: '',
+  username: '',
   password: '',
   confirmPassword: ''
 })
@@ -127,11 +143,12 @@ const handleRegister = async () => {
       return
     }
 
-    const result = await register(form.email, form.password)
+    const result = await register(form.email, form.username, form.password)
     
     if (result.success) {
       success.value = '注册成功！请登录您的账户'
       form.email = ''
+      form.username = ''
       form.password = ''
       form.confirmPassword = ''
       

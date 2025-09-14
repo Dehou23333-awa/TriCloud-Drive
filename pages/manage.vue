@@ -12,7 +12,7 @@
 
           <div v-if="isLoggedIn" class="flex items-center space-x-4">
             <span class="text-gray-700">
-              欢迎，{{ user?.email }}
+              欢迎，{{ user?.username }}
             </span>
             <NuxtLink
               to="/"
@@ -84,10 +84,10 @@
           <div class="flex flex-wrap items-center gap-3">
             <div class="relative">
               <input
-                v-model="filters.email"
+                v-model="filters.username"
                 @keyup.enter="fetchUsers"
                 type="text"
-                placeholder="按邮箱搜索"
+                placeholder="按用户名搜索"
                 class="w-72 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
               />
             </div>
@@ -128,6 +128,16 @@
                   autocomplete="off"
                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   placeholder="user@example.com"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">用户名</label>
+                <input
+                  v-model="addUsername"
+                  type="text"
+                  autocomplete="off"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  placeholder="只能包含大小写字母和数字"
                 />
               </div>
               <div>
@@ -180,6 +190,7 @@
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">邮箱</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">注册时间</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">管理员</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">超级管理员</th>
@@ -192,14 +203,15 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr v-if="loading">
-                  <td colspan="10" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
+                  <td colspan="11" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
                 </tr>
                 <tr v-else-if="users.length === 0">
-                  <td colspan="10" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
+                  <td colspan="11" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
                 </tr>
                 <tr v-for="u in users" :key="u.id">
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.id }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.email }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.username }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatToUTC8(u.created_at) }}</td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex justify-center">
@@ -304,6 +316,7 @@ import { formatToUTC8 } from '~/server/utils/time'
 type DbUser = {
   id: number
   email: string
+  username: string
   created_at: string
   IsAdmin: number | boolean
   IsSuperAdmin: number | boolean
@@ -326,11 +339,13 @@ const loading = ref(false)
 const lastRefreshed = ref<string | null>(null)
 
 const filters = reactive({
-  email: ''
+  email: '',
+  username: ''
 })
 
 // 添加用户表单
 const addEmail = ref('')
+const addUsername = ref('')
 const addPassword = ref('')
 const addLoading = ref(false)
 const addMessage = ref('')
@@ -358,7 +373,7 @@ const disableDeleteFor = (u: DbUser) => {
 
 const deleteUser = async (u: DbUser) => {
   if (disableDeleteFor(u)) return
-  const ok = window.confirm(`确认删除用户「${u.email}」及其全部文件吗？此操作不可恢复！`)
+  const ok = window.confirm(`确认删除用户「${u.username}」及其全部文件吗？此操作不可恢复！`)
   if (!ok) return
 
   deletingId.value = u.id
@@ -387,7 +402,7 @@ const fetchUsers = async () => {
   loading.value = true
   try {
     const resp = await $fetch<{ users: DbUser[]; totalCount: number }>('/api/manage/listUsers', {
-      query: filters.email ? { email: filters.email } : {}
+      query: filters.username ? { username: filters.username } : {}
     })
     users.value = (resp.users || []).map((u) => ({
       ...u,
@@ -410,7 +425,8 @@ const fetchUsers = async () => {
 onMounted(fetchUsers)
 
 const resetFilters = () => {
-  filters.email = ''
+  filters.email = '',
+  filters.username = '',
   fetchUsers()
 }
 
@@ -425,9 +441,10 @@ const handleAddUser = async () => {
 
   addLoading.value = true
   try {
-    await register(addEmail.value, addPassword.value)
+    await register(addEmail.value, addUsername.value, addPassword.value)
     addMessage.value = '用户创建成功'
     addEmail.value = ''
+    addUsername.value = ''
     addPassword.value = ''
     await fetchUsers()
   } catch (err: any) {

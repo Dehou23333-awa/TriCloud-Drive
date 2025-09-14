@@ -6,6 +6,7 @@ import { getDb } from '~/server/utils/db-adapter';
 interface User {
   id: number;
   email: string;
+  username:string;
   created_at: string;
   IsAdmin: boolean;
   IsSuperAdmin: boolean;
@@ -31,7 +32,7 @@ export default defineEventHandler(async (event) => {
     
     // 构建基础SQL查询
     let sql = `
-      SELECT id, email, created_at, IsAdmin, IsSuperAdmin, usedStorage, maxStorage, usedDownload, maxDownload
+      SELECT id, email, username, created_at, IsAdmin, IsSuperAdmin, usedStorage, maxStorage, usedDownload, maxDownload
       FROM users 
       WHERE 1=1
     `;
@@ -43,11 +44,11 @@ export default defineEventHandler(async (event) => {
     const params = []; // 用于主查询的参数
     const countParams = []; // 用于计数查询的参数
     
-    if (queryParams.email) {
-      sql += ` AND email LIKE ?`;
-      countSql += ` AND email LIKE ?`;
-      params.push(`%${queryParams.email}%`);
-      countParams.push(`%${queryParams.email}%`);
+    if (queryParams.username) {
+      sql += ` AND username LIKE ?`;
+      countSql += ` AND username LIKE ?`;
+      params.push(`%${queryParams.username}%`);
+      countParams.push(`%${queryParams.username}%`);
     }
     
     // 添加排序

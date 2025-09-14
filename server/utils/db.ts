@@ -1,6 +1,7 @@
 export interface User {
   id: number
   email: string
+  username: string
   password_hash: string
   created_at: string
   IsAdmin: boolean
@@ -28,11 +29,11 @@ export class UserService {
     this.db = db
   }
 
-  async createUser(email: string, passwordHash: string): Promise<User | null> {
+  async createUser(email: string, username: string, passwordHash: string): Promise<User | null> {
     try {
       const result = await this.db
-        .prepare('INSERT INTO users (email, password_hash) VALUES (?, ?) RETURNING *')
-        .bind(email, passwordHash)
+        .prepare('INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?) RETURNING *')
+        .bind(email, username, passwordHash)
         .first()
       
       return result as User
@@ -52,6 +53,19 @@ export class UserService {
       return user as User || null
     } catch (error) {
       console.error('Error getting user by email:', error)
+      return null
+    }
+  }
+  async getUserByUsername(username: string): Promise<User | null> {
+    try {
+      const user = await this.db
+        .prepare('SELECT * FROM users WHERE username = ?')
+        .bind(username)
+        .first()
+      
+      return user as User || null
+    } catch (error) {
+      console.error('Error getting user by username:', error)
       return null
     }
   }

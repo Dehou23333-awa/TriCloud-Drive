@@ -3,6 +3,7 @@ import { verifyToken } from './auth'
 export interface AuthenticatedUser {
   userId: number
   email: string
+  username: string
 }
 
 /**
@@ -30,7 +31,8 @@ export async function requireAuth(event: any): Promise<AuthenticatedUser> {
 
   return {
     userId: decoded.userId,
-    email: decoded.email || ''
+    email: decoded.email || '',
+    username: decoded.username || ''
   }
 }
 
