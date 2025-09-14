@@ -7,61 +7,48 @@ const generateCDNUrl = (
   fileKey: string,
   cdnDomain: string,
   primaryKey: string,
-  backupKey: string, // backupKey 未在此逻辑中使用，但保留参数
+  backupKey: string,
   ttl: number,
-  authParam: string, // 这是签名参数的名称，例如 'sign'
+  authParam: string,
   filename?: string
 ) => {
-  const timestamp = Math.floor(Date.now() / 1000) + ttl;
-  const path = `/${fileKey}`;
-  const rand = Math.floor(Math.random() * 1000000).toString(); // 确保是字符串
-  const uid = 0;
-  
-  const secret = primaryKey;
-  
-  // 1. 构造待签名的字符串 (这部分是正确的)
-  const authString = `${path}-${timestamp}-${rand}-${uid}-${secret}`;
-  const sign = crypto.createHash('md5').update(authString).digest('hex');
-  
-  // 2. 构造符合 TypeA 规范的签名参数值
-  // 格式: timestamp-rand-uid-md5hash
-  const authValue = `${timestamp}-${rand}-${uid}-${sign}`;
-  
-  // 3. 构建最终 URL
-  const params = new URLSearchParams();
-  params.set(authParam, authValue); // 将拼接好的完整字符串作为签名参数的值
-  
-  // 如果指定了文件名，添加下载参数
+  const timestamp = Math.floor(Date.now() / 1000) + ttl
+  const path = `/${fileKey}`
+  const rand = Math.floor(Math.random() * 1000000).toString()
+  const uid = 0
+
+  const secret = primaryKey
+  const authString = `${path}-${timestamp}-${rand}-${uid}-${secret}`
+  const sign = crypto.createHash('md5').update(authString).digest('hex')
+
+  const authValue = `${timestamp}-${rand}-${uid}-${sign}`
+
+  const params = new URLSearchParams()
+  params.set(authParam, authValue)
   if (filename) {
-    params.set('response-content-disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    params.set('response-content-disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
   }
-  
-  return `https://${cdnDomain}${path}?${params.toString()}`;
+
+  return `https://${cdnDomain}${path}?${params.toString()}`
 }
+
+// 兼容 D1 / sqlite3 的受影响行数
+const getAffectedRows = (res: any) =>
+  res?.meta?.changes ?? res?.meta?.rowsWritten ?? res?.meta?.rowsAffected ?? 0
 
 export default defineEventHandler(async (event) => {
   try {
-    // 验证用户认证
     const user = await requireAuth(event)
-    
     const { fileKey, filename } = await readBody(event)
-    
+
     if (!fileKey) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: '文件路径不能为空'
-      })
+      throw createError({ statusCode: 400, statusMessage: '文件路径不能为空' })
     }
 
     const config = useRuntimeConfig()
-    
-    // 检查文件是否属于当前用户
     const db = getDb(event)
     if (!db) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: '数据库连接失败'
-      })
+      throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
     }
 
     // 验证文件所有权
@@ -71,61 +58,91 @@ export default defineEventHandler(async (event) => {
       .first()
 
     if (!fileRecord) {
-      throw createError({
-        statusCode: 404,
-        statusMessage: '文件不存在或无权访问'
-      })
+      throw createError({ statusCode: 404, statusMessage: '文件不存在或无权访问' })
     }
 
-    // 检查是否启用 CDN
-    if (config.cdnEnabled && config.cdnDomain) {
-      // 使用 CDN 生成下载链接
-      const cdnUrl = generateCDNUrl(
-        fileKey, 
-        config.cdnDomain, 
-        config.cdnAuthKeyPrimary, 
-        config.cdnAuthKeyBackup, 
-        config.cdnAuthTtl, 
-        config.cdnAuthParam, 
-        filename
-      )
-      
+    const fileSize = Number(fileRecord.file_size || 0)
+
+    // ========== 并发安全：原子预占下载额度 ==========
+    // 逻辑：直接用一条 UPDATE 做 check+incr。
+    // 约定：maxDownload <= 0 表示不限流量，但仍会累计 usedDownload（如不需要可自行改为不累计）。
+    const reserveRes = await db
+      .prepare(`
+        UPDATE users
+        SET usedDownload = COALESCE(usedDownload, 0) + ?
+        WHERE id = ?
+          AND (
+            COALESCE(maxDownload, 0) <= 0
+            OR COALESCE(usedDownload, 0) + ? <= COALESCE(maxDownload, 0)
+          )
+      `)
+      .bind(fileSize, user.userId, fileSize)
+      .run()
+
+    const reserved = getAffectedRows(reserveRes) > 0
+    if (!reserved) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: '下载额度不足：下载该文件将超过您的下载流量上限'
+      })
+    }
+    // ========== 原子预占结束 ==========
+
+    // 后续如果出现异常，尝试回滚预占
+    const safeFail = async (err: any) => {
+      try {
+        await db
+          .prepare('UPDATE users SET usedDownload = COALESCE(usedDownload, 0) - ? WHERE id = ?')
+          .bind(fileSize, user.userId)
+          .run()
+      } catch (_) {
+        // 忽略回滚失败
+      }
+      throw err
+    }
+
+    try {
+      if (config.cdnEnabled && config.cdnDomain) {
+        const cdnUrl = generateCDNUrl(
+          fileKey,
+          config.cdnDomain,
+          config.cdnAuthKeyPrimary,
+          config.cdnAuthKeyBackup,
+          config.cdnAuthTtl,
+          config.cdnAuthParam,
+          filename
+        )
+
+        return {
+          success: true,
+          data: {
+            downloadUrl: cdnUrl,
+            filename: filename || fileRecord.filename,
+            fileSize: fileRecord.file_size,
+            expiresAt: new Date(Date.now() + config.cdnAuthTtl * 1000).toISOString(),
+            useCDN: true
+          }
+        }
+      }
+
+      // 无 CDN：返回 COS 直链
+      const cosUrl = `https://${config.cosBucket}.cos.${config.cosRegion}.myqcloud.com/${fileKey}`
       return {
         success: true,
         data: {
-          downloadUrl: cdnUrl,
+          downloadUrl: cosUrl,
           filename: filename || fileRecord.filename,
           fileSize: fileRecord.file_size,
-          expiresAt: new Date(Date.now() + config.cdnAuthTtl * 1000).toISOString(),
-          useCDN: true
+          expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+          useCDN: false
         }
       }
+    } catch (err: any) {
+      await safeFail(err)
     }
-
-    // 简化版：直接返回 COS URL（用于测试）
-    const cosUrl = `https://${config.cosBucket}.cos.${config.cosRegion}.myqcloud.com/${fileKey}`
-    
-    return {
-      success: true,
-      data: {
-        downloadUrl: cosUrl,
-        filename: filename || fileRecord.filename,
-        fileSize: fileRecord.file_size,
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-        useCDN: false
-      }
-    }
-    
   } catch (error: any) {
     console.error('Generate download signature error:', error)
-    
-    if (error.statusCode) {
-      throw error
-    }
-    
-    throw createError({
-      statusCode: 500,
-      statusMessage: '生成下载签名失败'
-    })
+    if (error.statusCode) throw error
+    throw createError({ statusCode: 500, statusMessage: '生成下载签名失败' })
   }
 })

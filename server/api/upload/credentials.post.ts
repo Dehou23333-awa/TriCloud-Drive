@@ -1,4 +1,5 @@
 import { requireAuth } from '~/server/utils/auth-middleware'
+import { getDb } from '~/server/utils/db-adapter'
 import crypto from 'crypto'
 
 export default defineEventHandler(async (event) => {
@@ -22,26 +23,43 @@ export default defineEventHandler(async (event) => {
   try {
     // 验证用户认证
     const user = await requireAuth(event)
-
-    // 获取运行时配置
     const config = useRuntimeConfig()
 
     // 获取上传文件信息
     const { filename, fileSize } = await readBody(event)
     if (!filename) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: '文件名不能为空'
-      })
+      throw createError({ statusCode: 400, statusMessage: '文件名不能为空' })
     }
+
+    // 参数校验：fileSize 必须为正数
+    const size = Number(fileSize)
+    if (!Number.isFinite(size) || size <= 0) {
+      throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
+    }
+
+    // ——— 用户配额查询与校验（使用 db-adapter）———
+    const db = getDb(event)
+    const quotaRow: any = await db
+      .prepare('SELECT usedStorage, maxStorage FROM users WHERE id = ?')
+      .bind(user.userId)
+      .first()
+
+    if (!quotaRow) {
+      throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
+    }
+
+    const usedStorage = Number(quotaRow.usedStorage ?? 0) || 0
+    const maxStorage = Number(quotaRow.maxStorage ?? 0) || 0
+
+    // maxStorage = 0 视为不限制；如需禁止上传可改为：if (maxStorage <= 0 || usedStorage + size > maxStorage) ...
+    if (maxStorage > 0 && usedStorage + size > maxStorage) {
+      throw createError({ statusCode: 403, statusMessage: '存储空间不足，上传该文件将超出配额' })
+    }
+    // ————————————————————————————————————
 
     // 生成UUID作为文件名，避免中文字符问题
     const uuid = crypto.randomUUID()
-    // 提取文件扩展名
-    const fileExtension = filename.includes('.') ? 
-      filename.substring(filename.lastIndexOf('.')).toLowerCase() : ''
-    
-    // 生成文件路径（用户ID/年月/UUID文件名）
+    const fileExtension = filename.includes('.') ? filename.substring(filename.lastIndexOf('.')).toLowerCase() : ''
     const now = new Date()
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -52,24 +70,16 @@ export default defineEventHandler(async (event) => {
     if (!config.tencentSecretId || !config.tencentSecretKey || 
         config.tencentSecretId === 'your_secret_id_here' || 
         config.tencentSecretKey === 'your_secret_key_here') {
-      
       return {
         statusCode: 500,
-        body: JSON.stringify({
-          success: false,
-          message: '腾讯云密钥未配置'
-        })
+        body: JSON.stringify({ success: false, message: '腾讯云密钥未配置' })
       }
     }
 
     // 生成临时密钥（使用腾讯云 STS）
     const { Client } = await import('tencentcloud-sdk-nodejs/tencentcloud/services/sts/v20180813/sts_client')
-    
     const client = new Client({
-      credential: {
-        secretId: config.tencentSecretId,
-        secretKey: config.tencentSecretKey,
-      },
+      credential: { secretId: config.tencentSecretId, secretKey: config.tencentSecretKey },
       region: config.cosRegion,
     })
 
@@ -92,9 +102,7 @@ export default defineEventHandler(async (event) => {
               'name/cos:UploadPart',
               'name/cos:CompleteMultipartUpload'
             ],
-            resource: [
-              resource
-            ]
+            resource: [resource]
           }
         ]
       }),
@@ -104,12 +112,8 @@ export default defineEventHandler(async (event) => {
 
     const response = await client.GetFederationToken(params)
     const credentials = response.Credentials
-
     if (!credentials) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: '获取临时密钥失败'
-      })
+      throw createError({ statusCode: 500, statusMessage: '获取临时密钥失败' })
     }
 
     return {
@@ -125,21 +129,14 @@ export default defineEventHandler(async (event) => {
         bucket: config.cosBucket,
         region: config.cosRegion,
         fileKey,
-        originalFilename: filename, // 原始文件名
-        safeFilename,              // UUID安全文件名
+        originalFilename: filename,
+        safeFilename,
         uploadUrl: `https://${config.cosBucket}.cos.${config.cosRegion}.myqcloud.com`
       }
     }
   } catch (error: any) {
     console.error('Generate upload credentials error:', error)
-    
-    if (error.statusCode) {
-      throw error
-    }
-    
-    throw createError({
-      statusCode: 500,
-      statusMessage: '生成上传凭证失败'
-    })
+    if (error.statusCode) throw error
+    throw createError({ statusCode: 500, statusMessage: '生成上传凭证失败' })
   }
 })

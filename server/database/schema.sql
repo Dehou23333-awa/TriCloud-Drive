@@ -9,9 +9,9 @@ CREATE TABLE users (
   IsAdmin BOOLEAN DEFAULT 0,
   IsSuperAdmin BOOLEAN DEFAULT 0,
   usedStorage INTEGER DEFAULT 0,
-  maxStorage INTEGER DEFAULT 0,
+  maxStorage INTEGER DEFAULT 1,
   usedDownload INTEGER DEFAULT 0,
-  maxDownload INTEGER DEFAULT 0
+  maxDownload INTEGER DEFAULT 1
 );
 
 CREATE TABLE files (
