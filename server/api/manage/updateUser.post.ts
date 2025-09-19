@@ -16,7 +16,8 @@ export default defineEventHandler(async (event) => {
       maxStorage,
       usedStorage,
       maxDownload,
-      usedDownload
+      usedDownload,
+      expire_at
     } = body || {}
 
     if (!id && id !== 0) {
@@ -39,7 +40,8 @@ export default defineEventHandler(async (event) => {
         maxStorage = ?,
         usedStorage = ?,
         maxDownload = ?,
-        usedDownload = ?
+        usedDownload = ?,
+        expire_at = ?
       WHERE id = ?
     `
     const stmt = db.prepare(sql)
@@ -51,6 +53,7 @@ export default defineEventHandler(async (event) => {
         toNonNegativeNumber(usedStorage),
         toNonNegativeNumber(maxDownload),
         toNonNegativeNumber(usedDownload),
+        expire_at,
         id
       )
       .run()

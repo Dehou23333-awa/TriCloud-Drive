@@ -14,6 +14,7 @@ interface User {
   maxStorage: number;
   usedDownload: number;
   maxDownload: number;
+  expire_at: string;
 }
 
 // 定义响应接口（移除了分页相关的字段）
@@ -32,7 +33,7 @@ export default defineEventHandler(async (event) => {
     
     // 构建基础SQL查询
     let sql = `
-      SELECT id, email, username, created_at, IsAdmin, IsSuperAdmin, usedStorage, maxStorage, usedDownload, maxDownload
+      SELECT id, email, username, created_at, IsAdmin, IsSuperAdmin, usedStorage, maxStorage, usedDownload, maxDownload, expire_at
       FROM users 
       WHERE 1=1
     `;

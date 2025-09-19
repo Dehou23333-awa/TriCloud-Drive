@@ -20,6 +20,38 @@ export default defineEventHandler(async (event) => {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
   })
 
+  // 解析 SQL 时间字符串（形如 2026-12-31 11:20:28）；无法解析时返回 null
+  function parseSqlDateTime(input: any): Date | null {
+    if (!input) return null
+    if (input instanceof Date) return input
+    if (typeof input === 'number') {
+      const d = new Date(input)
+      return isNaN(d.getTime()) ? null : d
+    }
+    const s = String(input).trim()
+    if (!s) return null
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/)
+    if (m) {
+      const y = parseInt(m[1], 10)
+      const mo = parseInt(m[2], 10)
+      const d = parseInt(m[3], 10)
+      const h = parseInt(m[4], 10)
+      const mi = parseInt(m[5], 10)
+      const se = parseInt(m[6], 10)
+      const dt = new Date(y, mo - 1, d, h, mi, se) // 以本地时区解释
+      return isNaN(dt.getTime()) ? null : dt
+    }
+    // 兜底：尝试让 JS 解析（将空格替换为 T）
+    const dt = new Date(s.replace(' ', 'T'))
+    return isNaN(dt.getTime()) ? null : dt
+  }
+
+  function isExpired(expireAt: any): boolean {
+    const dt = parseSqlDateTime(expireAt)
+    if (!dt) return false
+    return Date.now() >= dt.getTime()
+  }
+
   try {
     // 验证用户认证
     const user = await requireAuth(event)
@@ -37,10 +69,10 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
     }
 
-    // ——— 用户配额查询与校验（使用 db-adapter）———
+    // ——— 用户配额与过期校验（使用 db-adapter）———
     const db = getDb(event)
     const quotaRow: any = await db
-      .prepare('SELECT usedStorage, maxStorage FROM users WHERE id = ?')
+      .prepare('SELECT usedStorage, maxStorage, expire_at FROM users WHERE id = ?')
       .bind(user.userId)
       .first()
 
@@ -48,10 +80,14 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
     }
 
+    // 新增：过期校验
+    if (isExpired(quotaRow.expire_at)) {
+      throw createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
+    }
+
     const usedStorage = Number(quotaRow.usedStorage ?? 0) || 0
     const maxStorage = Number(quotaRow.maxStorage ?? 0) || 0
 
-    // maxStorage = 0 视为不限制；如需禁止上传可改为：if (maxStorage <= 0 || usedStorage + size > maxStorage) ...
     if (maxStorage > 0 && usedStorage + size > maxStorage) {
       throw createError({ statusCode: 403, statusMessage: '存储空间不足，上传该文件将超出配额' })
     }

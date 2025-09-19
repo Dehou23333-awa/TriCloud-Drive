@@ -8,6 +8,7 @@ export interface User {
   maxStorage: number
   usedDownload: number
   maxDownload: number
+  expire_at: string | null
 }
 
 export interface AuthResponse {

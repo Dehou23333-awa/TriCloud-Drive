@@ -192,27 +192,42 @@
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">邮箱</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">注册时间</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">套餐过期时间</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">管理员</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">超级管理员</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">容量限制</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">容量已使用</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">下载限制</th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">下载已使用</th>
+                  
                   <th class="px-6 py-3"></th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr v-if="loading">
-                  <td colspan="11" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
+                  <td colspan="12" class="px-6 py-8 text-center text-sm text-gray-500">载入中...</td>
                 </tr>
                 <tr v-else-if="users.length === 0">
-                  <td colspan="11" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
+                  <td colspan="12" class="px-6 py-8 text-center text-sm text-gray-500">暂无数据</td>
                 </tr>
                 <tr v-for="u in users" :key="u.id">
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.id }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.email }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.username }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatToUTC8(u.created_at) }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="text"
+                      v-model="u.expire_at"
+                      @blur="normalizeExpireAt(u)"
+                      :disabled="updatingId === u.id"
+                      class="w-56 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="YYYY-MM-DD HH:mm:ss（留空为不过期）"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      title="格式：YYYY-MM-DD HH:mm:ss，留空表示不过期"
+                    />
+                  </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex justify-center">
                       <input
@@ -337,6 +352,7 @@ type DbUser = {
   maxStorage: number | string
   usedDownload: number | string
   maxDownload: number | string
+  expire_at: string | null
 }
 
 // 后端返回的原始用户类型（容量字段为数字，单位：字节）
@@ -484,7 +500,8 @@ const fetchUsers = async () => {
       usedStorage: formatBytes(Number(u.usedStorage ?? 0)),
       maxStorage: formatBytes(Number(u.maxStorage ?? 0)),
       usedDownload: formatBytes(Number(u.usedDownload ?? 0)),
-      maxDownload: formatBytes(Number(u.maxDownload ?? 0))
+      maxDownload: formatBytes(Number(u.maxDownload ?? 0)),
+      expire_at: u.expire_at ? formatToUTC8(u.expire_at) : ''
     }))
     totalCount.value = resp.totalCount || 0
     lastRefreshed.value = new Date().toISOString()
@@ -535,6 +552,9 @@ const saveUser = async (u: DbUser) => {
   try {
     updatingId.value = u.id
 
+    // 确保先规范化（即使没触发 blur）
+    const normalizedExpire = parseExpireAt((u.expire_at as string | null) ?? null)
+
     const payload = {
       id: u.id,
       IsAdmin: u.IsAdmin ? 1 : 0,
@@ -542,7 +562,9 @@ const saveUser = async (u: DbUser) => {
       maxStorage: parseBytes(u.maxStorage as string | number),
       usedStorage: parseBytes(u.usedStorage as string | number),
       maxDownload: parseBytes(u.maxDownload as string | number),
-      usedDownload: parseBytes(u.usedDownload as string | number)
+      usedDownload: parseBytes(u.usedDownload as string | number),
+      // 留空则传 null，表示不过期
+      expire_at: normalizedExpire
     }
 
     await $fetch('/api/manage/updateUser', {
@@ -550,18 +572,63 @@ const saveUser = async (u: DbUser) => {
       body: payload
     })
 
-    // 保存成功后，重新用标准格式显示
+    // 保存成功后，统一成标准格式显示
     u.maxStorage = formatBytes(payload.maxStorage)
     u.usedStorage = formatBytes(payload.usedStorage)
     u.maxDownload = formatBytes(payload.maxDownload)
     u.usedDownload = formatBytes(payload.usedDownload)
+    u.expire_at = payload.expire_at ?? ''
   } catch (err) {
     console.error('更新用户失败:', err)
-    // 回滚
     await fetchUsers()
   } finally {
     updatingId.value = null
   }
+}
+/* -------- 工具：过期时间处理 -------- */
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// 仅接受 YYYY-MM-DD HH:mm:ss（或中间用 T）的字符串，返回规范化字符串或 null（空/无效）
+const parseExpireAt = (val: string | null): string | null => {
+  if (!val) return null
+  const s = String(val).trim()
+  if (!s) return null
+
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/)
+  if (!m) return null
+
+  const [y, mo, d, h, mi, se] = m.slice(1).map(Number)
+  const date = new Date(y, mo - 1, d, h, mi, se)
+
+  // 反校验，避免 2025-02-31 这种非法日期
+  if (
+    date.getFullYear() !== y ||
+    date.getMonth() !== mo - 1 ||
+    date.getDate() !== d ||
+    date.getHours() !== h ||
+    date.getMinutes() !== mi ||
+    date.getSeconds() !== se
+  ) {
+    return null
+  }
+
+  return `${y}-${pad2(mo)}-${pad2(d)} ${pad2(h)}:${pad2(mi)}:${pad2(se)}`
+}
+
+// 输入框失焦时规范化显示（或提示）
+const normalizeExpireAt = (u: DbUser) => {
+  const raw = (u.expire_at ?? '').toString().trim()
+  if (!raw) {
+    u.expire_at = ''
+    return
+  }
+  const normalized = parseExpireAt(raw)
+  if (!normalized) {
+    alert('过期时间格式无效，请使用 YYYY-MM-DD HH:mm:ss，例如：2026-12-31 11:20:28')
+    return
+  }
+  u.expire_at = normalized
 }
 
 definePageMeta({
