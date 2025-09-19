@@ -9,10 +9,11 @@ CREATE TABLE users (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   IsAdmin BOOLEAN DEFAULT 0,
   IsSuperAdmin BOOLEAN DEFAULT 0,
-  usedStorage INTEGER DEFAULT 0,
-  maxStorage INTEGER DEFAULT 1,
-  usedDownload INTEGER DEFAULT 0,
-  maxDownload INTEGER DEFAULT 1
+  usedStorage BIGINT DEFAULT 0,
+  maxStorage BIGINT DEFAULT 1,
+  usedDownload BIGINT DEFAULT 0,
+  maxDownload BIGINT DEFAULT 1,
+  expire_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE files (
@@ -20,7 +21,7 @@ CREATE TABLE files (
   user_id INTEGER NOT NULL,
   filename TEXT NOT NULL,
   file_key TEXT NOT NULL,
-  file_size INTEGER NOT NULL,
+  file_size BIGINT NOT NULL,
   file_url TEXT NOT NULL,
   content_type TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,

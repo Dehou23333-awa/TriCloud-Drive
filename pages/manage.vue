@@ -237,48 +237,60 @@
                   <!-- 容量限制（可编辑） -->
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <input
-                      type="number"
-                      v-model.number="u.maxStorage"
-                      min="0"
-                      step="1"
+                      type="text"
+                      v-model="u.maxStorage"
+                      @blur="normalizeSizeField(u, 'maxStorage')"
                       :disabled="updatingId === u.id"
-                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      class="w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="如 10 GB"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      title="支持单位：B, KB, MB, GB, TB"
                     />
                   </td>
 
                   <!-- 容量已使用（可编辑） -->
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <input
-                      type="number"
-                      v-model.number="u.usedStorage"
-                      min="0"
-                      step="1"
+                      type="text"
+                      v-model="u.usedStorage"
+                      @blur="normalizeSizeField(u, 'usedStorage')"
                       :disabled="updatingId === u.id"
-                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      class="w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="如 512 MB"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      title="支持单位：B, KB, MB, GB, TB"
                     />
                   </td>
 
                   <!-- 下载限制（可编辑） -->
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <input
-                      type="number"
-                      v-model.number="u.maxDownload"
-                      min="0"
-                      step="1"
+                      type="text"
+                      v-model="u.maxDownload"
+                      @blur="normalizeSizeField(u, 'maxDownload')"
                       :disabled="updatingId === u.id"
-                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      class="w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="如 100 GB"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      title="支持单位：B, KB, MB, GB, TB"
                     />
                   </td>
 
                   <!-- 下载已使用（可编辑） -->
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <input
-                      type="number"
-                      v-model.number="u.usedDownload"
-                      min="0"
-                      step="1"
+                      type="text"
+                      v-model="u.usedDownload"
+                      @blur="normalizeSizeField(u, 'usedDownload')"
                       :disabled="updatingId === u.id"
-                      class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      class="w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="如 1.5 GB"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      title="支持单位：B, KB, MB, GB, TB"
                     />
                   </td>
 
@@ -320,12 +332,20 @@ type DbUser = {
   created_at: string
   IsAdmin: number | boolean
   IsSuperAdmin: number | boolean
+  // 允许字符串（用于显示带单位），保存时会解析为字节数
+  usedStorage: number | string
+  maxStorage: number | string
+  usedDownload: number | string
+  maxDownload: number | string
+}
+
+// 后端返回的原始用户类型（容量字段为数字，单位：字节）
+type ApiUser = Omit<DbUser, 'usedStorage' | 'maxStorage' | 'usedDownload' | 'maxDownload'> & {
   usedStorage: number
   maxStorage: number
   usedDownload: number
   maxDownload: number
 }
-
 
 const { user, isLoggedIn, logout, register, isAdminOrSuperAdmin } = useAuth()
 
@@ -364,9 +384,7 @@ const isAdminOnly = computed(() => !!user.value?.IsAdmin && !isSuper.value)
 
 // 前端禁用删除的规则（仅前端保护，服务端仍严格校验）
 const disableDeleteFor = (u: DbUser) => {
-  // 禁止删自己
   if (u.id === user.value?.id) return true
-  // 普通管理员不能删管理员或超管
   if (isAdminOnly.value && (u.IsAdmin || u.IsSuperAdmin)) return true
   return false
 }
@@ -382,7 +400,6 @@ const deleteUser = async (u: DbUser) => {
       method: 'POST',
       body: { id: u.id }
     })
-    // 刷新列表
     await fetchUsers()
   } catch (err: any) {
     const msg = err?.data?.statusMessage || '删除失败'
@@ -391,27 +408,83 @@ const deleteUser = async (u: DbUser) => {
     deletingId.value = null
   }
 }
-//console.log('manage mounted2')
+
 onMounted(async () => {
-    //console.log('manage mounted')
   canManage.value = await isAdminOrSuperAdmin()
   return canManage.value
 })
 
+/* -------- 工具：容量格式化/解析 -------- */
+
+// 把字节转成人类可读的字符串（B/KB/MB/GB/TB）
+const formatBytes = (bytes: number): string => {
+  if (!isFinite(bytes) || isNaN(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+  let i = 0
+  let val = bytes
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  const display =
+    val >= 100 ? Math.round(val) :
+    val >= 10 ? Math.round(val * 10) / 10 :
+    Math.round(val * 100) / 100
+  return `${display} ${units[i]}`
+}
+
+// 把字符串（可带单位）解析为字节数，支持：B/KB/MB/GB/TB、大小写、可省略 B
+const parseBytes = (input: string | number): number => {
+  if (typeof input === 'number') return Math.max(0, Math.round(input))
+  if (!input) return 0
+  let str = String(input).trim()
+  if (!str) return 0
+
+  // 处理中英文逗号、小写空格
+  str = str.replace(/，/g, ',').replace(',', '.').replace(/\s+/g, ' ')
+  const match = str.match(/^(-?\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/)
+  if (!match) return 0
+
+  let value = parseFloat(match[1])
+  let unit = (match[2] || '').toLowerCase()
+
+  if (isNaN(value) || value < 0) value = 0
+
+  let mult = 1
+  if (!unit || unit === 'b') mult = 1
+  else if (unit.startsWith('k')) mult = 1024
+  else if (unit.startsWith('m')) mult = 1024 ** 2
+  else if (unit.startsWith('g')) mult = 1024 ** 3
+  else if (unit.startsWith('t')) mult = 1024 ** 4
+  else mult = 1 // 未识别单位按字节处理
+
+  const bytes = Math.round(value * mult)
+  return bytes < 0 ? 0 : bytes
+}
+
+// 输入失焦时，把用户输入规范化为标准显示（如 1024 kb -> 1 MB）
+type SizeKey = 'maxStorage' | 'usedStorage' | 'maxDownload' | 'usedDownload'
+const normalizeSizeField = (u: DbUser, key: SizeKey) => {
+  const bytes = parseBytes(u[key] as string | number)
+  u[key] = formatBytes(bytes)
+}
+
+/* -------- 数据加载 -------- */
+
 const fetchUsers = async () => {
   loading.value = true
   try {
-    const resp = await $fetch<{ users: DbUser[]; totalCount: number }>('/api/manage/listUsers', {
+    const resp = await $fetch<{ users: ApiUser[]; totalCount: number }>('/api/manage/listUsers', {
       query: filters.username ? { username: filters.username } : {}
     })
     users.value = (resp.users || []).map((u) => ({
       ...u,
       IsAdmin: !!u.IsAdmin,
       IsSuperAdmin: !!u.IsSuperAdmin,
-      usedStorage: Number(u.usedStorage ?? 0),
-      maxStorage: Number(u.maxStorage ?? 0),
-      usedDownload: Number(u.usedDownload ?? 0),
-      maxDownload: Number(u.maxDownload ?? 0)
+      usedStorage: formatBytes(Number(u.usedStorage ?? 0)),
+      maxStorage: formatBytes(Number(u.maxStorage ?? 0)),
+      usedDownload: formatBytes(Number(u.usedDownload ?? 0)),
+      maxDownload: formatBytes(Number(u.maxDownload ?? 0))
     }))
     totalCount.value = resp.totalCount || 0
     lastRefreshed.value = new Date().toISOString()
@@ -425,10 +498,12 @@ const fetchUsers = async () => {
 onMounted(fetchUsers)
 
 const resetFilters = () => {
-  filters.email = '',
-  filters.username = '',
+  filters.email = ''
+  filters.username = ''
   fetchUsers()
 }
+
+/* -------- 添加用户保持不变 -------- */
 
 const handleAddUser = async () => {
   addError.value = ''
@@ -454,25 +529,32 @@ const handleAddUser = async () => {
   }
 }
 
+/* -------- 保存用户：解析输入为字节数后提交 -------- */
+
 const saveUser = async (u: DbUser) => {
   try {
     updatingId.value = u.id
 
-    // 简单防御：不为负数
     const payload = {
       id: u.id,
       IsAdmin: u.IsAdmin ? 1 : 0,
       IsSuperAdmin: u.IsSuperAdmin ? 1 : 0,
-      maxStorage: Math.max(0, Number(u.maxStorage) || 0),
-      usedStorage: Math.max(0, Number(u.usedStorage) || 0),
-      maxDownload: Math.max(0, Number(u.maxDownload) || 0),
-      usedDownload: Math.max(0, Number(u.usedDownload) || 0)
+      maxStorage: parseBytes(u.maxStorage as string | number),
+      usedStorage: parseBytes(u.usedStorage as string | number),
+      maxDownload: parseBytes(u.maxDownload as string | number),
+      usedDownload: parseBytes(u.usedDownload as string | number)
     }
 
     await $fetch('/api/manage/updateUser', {
       method: 'POST',
       body: payload
     })
+
+    // 保存成功后，重新用标准格式显示
+    u.maxStorage = formatBytes(payload.maxStorage)
+    u.usedStorage = formatBytes(payload.usedStorage)
+    u.maxDownload = formatBytes(payload.maxDownload)
+    u.usedDownload = formatBytes(payload.usedDownload)
   } catch (err) {
     console.error('更新用户失败:', err)
     // 回滚
