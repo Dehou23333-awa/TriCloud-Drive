@@ -87,13 +87,18 @@
               </div>
             </dl>
           </div>
-
-          <!-- 文件上传 -->
-          <FileUpload @uploaded="handleFileUploaded" />
+          <!-- 文件上传：把当前文件夹 ID 传进去 -->
+          <FileUpload
+        :current-folder-id="currentFolderId"
+        @uploaded="handleFileUploaded"
+         />
         </div>
 
         <!-- 文件列表 -->
-        <FileList ref="fileListRef" />
+        <FileList
+         ref="fileListRef"
+         @folder-change="onFolderChange"
+       />
       </div>
     </main>
   </div>
@@ -103,21 +108,18 @@
 const { user, isLoggedIn, logout } = useAuth()
 
 const fileListRef = ref()
+const currentFolderId = ref<number | null>(null)
 
-const handleLogout = async () => {
-  await logout()
+const onFolderChange = (id: number | null) => {
+  currentFolderId.value = id
 }
 
+const handleLogout = async () => { await logout() }
+
 const handleFileUploaded = () => {
-  // 当文件上传完成后，刷新文件列表
-  if (fileListRef.value) {
-    fileListRef.value.refreshFiles()
-  }
+  fileListRef.value?.refreshFiles()
 }
 
 import { formatToUTC8 } from '~/server/utils/time'
-
-definePageMeta({
-  layout: false
-})
+definePageMeta({ layout: false })
 </script>

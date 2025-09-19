@@ -46,6 +46,74 @@ export default defineEventHandler(async (event) => {
 
     const placeholders = ids.map(() => '?').join(',')
 
+    // 在删除数据库前，先查出待删文件（用于COS删除）
+    const filesRes: any = await db
+      .prepare(`SELECT id, file_key, filename FROM files WHERE user_id = ? AND folder_id IN (${placeholders})`)
+      .bind(user.userId, ...ids)
+      .all()
+    const filesToDelete: { id: number; file_key: string; filename?: string }[] =
+      (filesRes?.results || []).filter((r: any) => !!r?.file_key)
+
+    // COS 删除（如果配置了密钥且有文件需要删除）
+    const config = useRuntimeConfig()
+    let cosAttempted = false
+    let cosDeleteAll = false
+
+    if (
+      filesToDelete.length > 0 &&
+      config.tencentSecretId &&
+      config.tencentSecretKey &&
+      config.tencentSecretId !== 'your_secret_id_here' &&
+      config.tencentSecretKey !== 'your_secret_key_here'
+    ) {
+      cosAttempted = true
+      try {
+        const COS = (await import('cos-nodejs-sdk-v5')).default
+        const cos = new COS({
+          SecretId: config.tencentSecretId,
+          SecretKey: config.tencentSecretKey,
+        })
+
+        const keys = filesToDelete.map((f) => ({ Key: f.file_key }))
+        const chunkSize = 1000
+        let deletedCount = 0
+
+        for (let i = 0; i < keys.length; i += chunkSize) {
+          const batch = keys.slice(i, i + chunkSize)
+          // Quiet: true 表示不返回逐个删除结果，若请求出错会直接走 err
+          await new Promise((resolve, reject) => {
+            cos.deleteMultipleObject(
+              {
+                Bucket: config.cosBucket,
+                Region: config.cosRegion,
+                Objects: batch,
+                Quiet: true,
+              },
+              (err: any, data: any) => {
+                if (err) {
+                  console.error('COS batch delete error:', err)
+                  reject(err)
+                } else {
+                  deletedCount += batch.length
+                  resolve(data)
+                }
+              }
+            )
+          })
+        }
+
+        cosDeleteAll = deletedCount === keys.length
+        if (cosDeleteAll) {
+          console.log(`Successfully deleted ${deletedCount} file(s) from COS for user ${user.userId}`)
+        } else {
+          console.warn(`COS deletion may be partial: ${deletedCount}/${keys.length}`)
+        }
+      } catch (cosError: any) {
+        console.error('Failed to delete files from COS during folder deletion:', cosError)
+        cosDeleteAll = false
+      }
+    }
+
     // 先删文件，再删文件夹（手动级联）
     await db
       .prepare(`DELETE FROM files WHERE user_id = ? AND folder_id IN (${placeholders})`)
@@ -57,7 +125,24 @@ export default defineEventHandler(async (event) => {
       .bind(user.userId, ...ids)
       .run()
 
-    return { success: true, message: '文件夹及其内容已删除' }
+    // 重算用户存储用量
+    await db
+      .prepare(`
+        UPDATE users
+        SET usedStorage = COALESCE((
+          SELECT SUM(file_size) FROM files WHERE user_id = ?
+        ), 0)
+        WHERE id = ?
+      `)
+      .bind(user.userId, user.userId)
+      .run()
+
+    let message = '文件夹及其内容已删除'
+    if (cosAttempted && !cosDeleteAll) {
+      message = '文件夹及其内容已删除，但COS文件删除可能失败'
+    }
+
+    return { success: true, message }
   } catch (error: any) {
     console.error('Delete folder error:', error)
     if (error.statusCode) throw error

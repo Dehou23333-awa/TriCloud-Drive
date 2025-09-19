@@ -324,6 +324,11 @@ const deleteFolder = async (folder: FolderRecord) => {
     alert(msg)
   }
 }
+const emit = defineEmits<{ 'folder-change': [number | null] }>()
+watch(currentFolderId, (id) => {
+  emit('folder-change', id)
+}, { immediate: true })
+
 
 onMounted(() => {
   fetchFiles()

@@ -154,6 +154,7 @@ const handleFileSelect = async (event: Event) => {
 // 核心修改：把当前 folderId 传给上传逻辑
 const handleFiles = async (files: File[]) => {
   try {
+    //console.log('Uploading to folderId =', props.currentFolderId)
     const urls = await uploadMultipleFiles(files, {
       folderId: props.currentFolderId ?? null
     })
