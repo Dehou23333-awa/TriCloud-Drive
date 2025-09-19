@@ -4,9 +4,12 @@
     
     <!-- 拖拽上传区域 -->
     <div
+      ref="dropZoneRef"
+      data-drop-zone
       @drop.prevent="handleDrop"
       @dragover.prevent
-      @dragenter.prevent
+      @dragenter.prevent="onDragEnter"
+      @dragleave.prevent="onDragLeave"
       class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-colors"
       :class="{
         'border-indigo-500 bg-indigo-50': isDragging,
@@ -97,6 +100,11 @@
 </template>
 
 <script setup lang="ts">
+// 当前文件夹ID（根目录传 null/不传）
+const props = defineProps<{
+  currentFolderId?: number | null
+}>()
+
 interface UploadedFile {
   name: string
   url: string
@@ -106,13 +114,28 @@ const emit = defineEmits<{
   uploaded: []
 }>()
 
+// composable（已在 useUpload.ts 中适配 folderId）
 const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileUpload()
 
 const isDragging = ref(false)
+const dragCounter = ref(0)
 const uploadedFiles = ref<UploadedFile[]>([])
 const fileInputRef = ref<HTMLInputElement>()
+const dropZoneRef = ref<HTMLElement | null>(null)
+
+const onDragEnter = () => {
+  dragCounter.value++
+  isDragging.value = true
+}
+const onDragLeave = () => {
+  dragCounter.value = Math.max(0, dragCounter.value - 1)
+  if (dragCounter.value === 0) {
+    isDragging.value = false
+  }
+}
 
 const handleDrop = async (event: DragEvent) => {
+  dragCounter.value = 0
   isDragging.value = false
   const files = Array.from(event.dataTransfer?.files || [])
   if (files.length > 0) {
@@ -128,24 +151,24 @@ const handleFileSelect = async (event: Event) => {
   }
 }
 
+// 核心修改：把当前 folderId 传给上传逻辑
 const handleFiles = async (files: File[]) => {
   try {
-    const urls = await uploadMultipleFiles(files)
+    const urls = await uploadMultipleFiles(files, {
+      folderId: props.currentFolderId ?? null
+    })
     
     // 添加到已上传文件列表
     const newFiles: UploadedFile[] = files.map((file, index) => ({
       name: file.name,
       url: urls[index]
     }))
-    
     uploadedFiles.value.push(...newFiles)
     
     // 清空文件输入
-    if (fileInputRef.value) {
-      fileInputRef.value.value = ''
-    }
+    if (fileInputRef.value) fileInputRef.value.value = ''
 
-    // 触发上传完成事件
+    // 通知父级刷新列表
     emit('uploaded')
   } catch (error) {
     console.error('文件上传失败:', error)
@@ -155,18 +178,8 @@ const handleFiles = async (files: File[]) => {
 const copyToClipboard = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
-    // 可以添加一个成功提示
   } catch (error) {
     console.error('复制失败:', error)
   }
 }
-
-// 拖拽事件处理
-onMounted(() => {
-  const dropZone = document.querySelector('[data-drop-zone]')
-  if (dropZone) {
-    dropZone.addEventListener('dragenter', () => { isDragging.value = true })
-    dropZone.addEventListener('dragleave', () => { isDragging.value = false })
-  }
-})
 </script>

@@ -2,7 +2,6 @@ import { requireAuth } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
-  // 解析 SQL 时间字符串（形如 2026-12-31 11:20:28）；无法解析时返回 null
   function parseSqlDateTime(input: any): Date | null {
     if (!input) return null
     if (input instanceof Date) return input
@@ -33,7 +32,6 @@ export default defineEventHandler(async (event) => {
     return Date.now() >= dt.getTime()
   }
 
-  // 格式化当前时间为 'YYYY-MM-DD HH:mm:ss'（用于 SQL 文本比较）
   function nowSqlString(): string {
     const now = new Date()
     const Y = now.getFullYear()
@@ -45,16 +43,85 @@ export default defineEventHandler(async (event) => {
     return `${Y}-${M}-${D} ${h}:${m}:${s}`
   }
 
+  function normalizeFolderId(input: any): number | null {
+    if (input === undefined || input === null || input === '' || input === 'root' || input === '0' || input === 0) {
+      return null
+    }
+    const n = Number(input)
+    if (!Number.isInteger(n) || n < 1) {
+      throw createError({ statusCode: 400, statusMessage: '非法的 folderId' })
+    }
+    return n
+  }
+
+  function splitName(filename: string): { base: string, ext: string } {
+    const i = filename.lastIndexOf('.')
+    if (i <= 0) return { base: filename, ext: '' }
+    return { base: filename.slice(0, i), ext: filename.slice(i) }
+  }
+
+  function escapeLike(input: string): string {
+    return input.replace(/([%_\\])/g, '\\$1')
+  }
+
+  function escapeRegExp(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  async function resolveUniqueFilename(db: any, userId: number, folderId: number | null, desired: string): Promise<{ name: string, base: string, ext: string, nextN: number }> {
+    const { base, ext } = splitName(desired)
+    const likePattern = `${escapeLike(base)} (%)${escapeLike(ext)}`
+    let rows
+    if (folderId === null) {
+      rows = await db
+        .prepare(`
+          SELECT filename FROM files
+          WHERE user_id = ? AND folder_id IS NULL
+            AND (filename = ? OR filename LIKE ? ESCAPE '\\')
+        `)
+        .bind(userId, desired, likePattern)
+        .all()
+    } else {
+      rows = await db
+        .prepare(`
+          SELECT filename FROM files
+          WHERE user_id = ? AND folder_id = ?
+            AND (filename = ? OR filename LIKE ? ESCAPE '\\')
+        `)
+        .bind(userId, folderId, desired, likePattern)
+        .all()
+    }
+    const existing = new Set<string>((rows?.results || []).map((r: any) => String(r.filename)))
+    if (!existing.has(desired)) {
+      return { name: desired, base, ext, nextN: 1 }
+    }
+    // 找到现有最大 (n)
+    const re = new RegExp(`^${escapeRegExp(base)} \\((\\d+)\\)${escapeRegExp(ext)}$`)
+    let maxN = 1
+    for (const name of existing) {
+      const m = name.match(re)
+      if (m) {
+        const n = parseInt(m[1], 10)
+        if (Number.isFinite(n) && n > maxN) maxN = n
+      }
+    }
+    const nextN = maxN + 1
+    return { name: `${base} (${nextN})${ext}`, base, ext, nextN }
+  }
+
+  function buildName(base: string, ext: string, n: number): string {
+    return n <= 1 ? `${base}${ext}` : `${base} (${n})${ext}`
+  }
+
   try {
     const user = await requireAuth(event)
-
     const { filename, safeFilename, fileKey, fileSize, fileUrl, contentType } = await readBody(event)
+    const folderId = normalizeFolderId((await readBody(event))?.folderId ?? (event as any)?.context?.folderId) // 兼容客户端传参
 
     if (!filename || !fileKey || !fileUrl) {
       throw createError({ statusCode: 400, statusMessage: '缺少必要的文件信息' })
     }
 
-    // 以服务端为准的 size 校验（仍建议在这里用 COS HEAD 获取真实大小，见文末“可选校验”）
     const size = Number(fileSize)
     if (!Number.isFinite(size) || size <= 0) {
       throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
@@ -65,23 +132,34 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
     }
 
-    // 新增：上传前的过期校验
+    // 上传前过期校验 + folder 归属校验
     const userRow: any = await db
       .prepare('SELECT expire_at FROM users WHERE id = ?')
       .bind(user.userId)
       .first()
-
     if (!userRow) {
       throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
     }
     if (isExpired(userRow.expire_at)) {
       throw createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
     }
+    if (folderId !== null) {
+      const chk = await db
+        .prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
+        .bind(folderId, user.userId)
+        .first()
+      if (!chk) {
+        throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
+      }
+    }
 
-    // 开启事务，保证扣减配额与插入文件记录的原子性
-    await db.prepare('BEGIN').bind().run()
+    // 使用 SAVEPOINT，兼容可能已存在的外层事务
+    await db.prepare('SAVEPOINT upload_tx').bind().run()
     try {
-      // 并发安全的原子扣减：增加过期校验（expire_at 为空表示不过期）
+      // 计算不重名的文件名
+      let { name: finalName, base, ext, nextN } = await resolveUniqueFilename(db, user.userId, folderId, filename)
+
+      // 并发安全扣减配额（并校验未过期）
       const upd = await db
         .prepare(`
           UPDATE users
@@ -90,35 +168,59 @@ export default defineEventHandler(async (event) => {
             AND (maxStorage = 0 OR usedStorage + ? <= maxStorage)
             AND (expire_at IS NULL OR expire_at > ?)
         `)
-        .bind(size, user.userId, size, nowSqlString())
-        .run()
+        .bind(size, user.userId, size, nowSqlString()).run()
 
-      // 通过受影响行数判断是否扣减成功（若为 0，表示会超限或账号已过期）
       const changes = (upd as any)?.meta?.changes ?? 0
       if (changes !== 1) {
-        await db.prepare('ROLLBACK').bind().run()
-        // 二次确认原因（可选）：这里简单返回统一文案，也可以再查一次判断究竟是超限还是过期
+        await db.prepare('ROLLBACK TO upload_tx').bind().run()
+        await db.prepare('RELEASE upload_tx').bind().run()
         throw createError({ statusCode: 403, statusMessage: '存储空间不足或账号已过期，禁止上传' })
       }
 
-      // 插入文件记录（file_size 用服务端确认的 size）
-      const file = await db
-        .prepare(`
-          INSERT INTO files (user_id, filename, file_key, file_size, file_url, content_type)
-          VALUES (?, ?, ?, ?, ?, ?)
-          RETURNING *
-        `)
-        .bind(
-          user.userId,
-          filename,
-          fileKey,
-          size,
-          fileUrl,
-          contentType || 'application/octet-stream'
-        )
-        .first()
+      // 插入文件记录（若并发导致重名，再自增后重试）
+      let file: any | null = null
+      const maxRetry = 10
+      for (let attempt = 0; attempt < maxRetry; attempt++) {
+        try {
+          file = await db
+            .prepare(`
+              INSERT INTO files (user_id, folder_id, filename, file_key, file_size, file_url, content_type)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              RETURNING *
+            `)
+            .bind(
+              user.userId,
+              folderId,                   // 允许 null 表示根目录
+              finalName,                  // 显示名，确保同目录下唯一
+              fileKey,
+              size,
+              fileUrl,
+              contentType || 'application/octet-stream'
+            )
+            .first()
+          break
+        } catch (e: any) {
+          const msg = String(e?.message || e)
+          // 唯一约束失败（同一文件夹重名）
+          if (msg.includes('UNIQUE') && msg.includes('files')) {
+            nextN += 1
+            finalName = buildName(base, ext, nextN)
+            continue
+          }
+          // 其他错误：回滚并抛出
+          await db.prepare('ROLLBACK TO upload_tx').bind().run()
+          await db.prepare('RELEASE upload_tx').bind().run()
+          throw e
+        }
+      }
 
-      await db.prepare('COMMIT').bind().run()
+      if (!file) {
+        await db.prepare('ROLLBACK TO upload_tx').bind().run()
+        await db.prepare('RELEASE upload_tx').bind().run()
+        throw createError({ statusCode: 500, statusMessage: '保存失败：重名重试次数过多' })
+      }
+
+      await db.prepare('RELEASE upload_tx').bind().run()
 
       return {
         success: true,
@@ -126,8 +228,10 @@ export default defineEventHandler(async (event) => {
         file
       }
     } catch (txErr) {
-      // 事务内出错则回滚
-      try { await db.prepare('ROLLBACK').bind().run() } catch (e) {}
+      try {
+        await db.prepare('ROLLBACK TO upload_tx').bind().run()
+        await db.prepare('RELEASE upload_tx').bind().run()
+      } catch (_) {}
       throw txErr
     }
   } catch (error: any) {

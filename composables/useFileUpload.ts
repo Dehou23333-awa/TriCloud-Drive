@@ -13,10 +13,12 @@ interface UploadConfig {
   bucket: string
   region: string
   fileKey: string
-  originalFilename: string  // 原始文件名
-  safeFilename: string     // UUID安全文件名
+  originalFilename: string
+  safeFilename: string
   uploadUrl: string
   demoMode?: boolean
+  // 后端会原样返回，但前端不强依赖
+  folderId?: number | null
 }
 
 interface UploadProgress {
@@ -30,10 +32,14 @@ export const useFileUpload = () => {
   const uploadProgress = ref<UploadProgress>({ loaded: 0, total: 0, percent: 0 })
   const uploadError = ref('')
 
-  const getUploadCredentials = async (filename: string, fileSize: number): Promise<UploadConfig> => {
+  const getUploadCredentials = async (
+    filename: string,
+    fileSize: number,
+    folderId?: number | null
+  ): Promise<UploadConfig> => {
     const response = await $fetch<{ success: boolean; data: UploadConfig }>('/api/upload/credentials', {
       method: 'POST',
-      body: { filename, fileSize }
+      body: { filename, fileSize, folderId: folderId ?? null }
     })
 
     if (!response.success) {
@@ -43,18 +49,20 @@ export const useFileUpload = () => {
     return response.data
   }
 
-  const uploadFile = async (file: File): Promise<string> => {
+  // 新增参数 options.folderId：指定上传到的文件夹（null 表示根目录）
+  const uploadFile = async (file: File, options?: { folderId?: number | null }): Promise<string> => {
     try {
       uploading.value = true
       uploadError.value = ''
       uploadProgress.value = { loaded: 0, total: file.size, percent: 0 }
 
-      // 获取上传凭证
-      const config = await getUploadCredentials(file.name, file.size)
+      const folderId = options?.folderId ?? null
 
-      // 检查是否为演示模式
+      // 获取上传凭证
+      const config = await getUploadCredentials(file.name, file.size, folderId)
+
+      // 演示模式
       if (config.demoMode) {
-        // 模拟上传进度
         for (let i = 0; i <= 100; i += 10) {
           uploadProgress.value = {
             loaded: (file.size * i) / 100,
@@ -64,34 +72,32 @@ export const useFileUpload = () => {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
 
-        // 生成演示文件URL
         const fileUrl = `${config.uploadUrl}/${config.fileKey}`
         
-        // 保存文件记录到数据库
+        // 保存文件记录到数据库（带上 folderId）
         await $fetch('/api/files/save', {
           method: 'POST',
           body: {
-            filename: file.name,              // 原始文件名
-            safeFilename: config.safeFilename, // UUID安全文件名
+            filename: file.name,
+            safeFilename: config.safeFilename,
             fileKey: config.fileKey,
             fileSize: file.size,
             fileUrl: fileUrl,
-            contentType: file.type
+            contentType: file.type,
+            folderId
           }
         })
 
         return fileUrl
       }
 
-      // 真实上传模式
-      // 初始化 COS 实例
+      // 真实上传
       const cos = new COS({
         SecretId: config.credentials.TmpSecretId,
         SecretKey: config.credentials.TmpSecretKey,
         SecurityToken: config.credentials.SecurityToken,
       })
 
-      // 上传文件
       const fileUrl = await new Promise<string>((resolve, reject) => {
         cos.putObject({
           Bucket: config.bucket,
@@ -110,23 +116,23 @@ export const useFileUpload = () => {
             uploadError.value = err.message || '上传失败'
             reject(err)
           } else {
-            // 返回文件的访问URL
-            const fileUrl = `https://${config.bucket}.cos.${config.region}.myqcloud.com/${config.fileKey}`
-            resolve(fileUrl)
+            const url = `https://${config.bucket}.cos.${config.region}.myqcloud.com/${config.fileKey}`
+            resolve(url)
           }
         })
       })
 
-      // 保存文件记录到数据库
+      // 保存文件记录到数据库（带上 folderId）
       await $fetch('/api/files/save', {
         method: 'POST',
         body: {
-          filename: file.name,              // 原始文件名
-          safeFilename: config.safeFilename, // UUID安全文件名
+          filename: file.name,
+          safeFilename: config.safeFilename,
           fileKey: config.fileKey,
           fileSize: file.size,
           fileUrl: fileUrl,
-          contentType: file.type
+          contentType: file.type,
+          folderId
         }
       })
 
@@ -139,19 +145,17 @@ export const useFileUpload = () => {
     }
   }
 
-  const uploadMultipleFiles = async (files: File[]): Promise<string[]> => {
+  const uploadMultipleFiles = async (files: File[], options?: { folderId?: number | null }): Promise<string[]> => {
     const results: string[] = []
-    
     for (const file of files) {
       try {
-        const url = await uploadFile(file)
+        const url = await uploadFile(file, { folderId: options?.folderId ?? null })
         results.push(url)
       } catch (error) {
         console.error(`上传文件 ${file.name} 失败:`, error)
         throw error
       }
     }
-    
     return results
   }
 
