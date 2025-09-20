@@ -17,7 +17,6 @@ interface UploadConfig {
   safeFilename: string
   uploadUrl: string
   demoMode?: boolean
-  // 后端会原样返回，但前端不强依赖
   folderId?: number | null
 }
 
@@ -27,54 +26,72 @@ interface UploadProgress {
   percent: number
 }
 
+type UploadOptions = {
+  folderId?: number | null
+  overwrite?: boolean
+  partOfBatch?: boolean
+  onProgressDelta?: (delta: number) => void
+}
+
 export const useFileUpload = () => {
   const uploading = ref(false)
   const uploadProgress = ref<UploadProgress>({ loaded: 0, total: 0, percent: 0 })
   const uploadError = ref('')
 
-  const getUploadCredentials = async (
-    filename: string,
-    fileSize: number,
+  const setProgress = (loaded: number, total: number) => {
+    const percent = total > 0 ? Math.round((loaded / total) * 100) : (loaded > 0 ? 100 : 0)
+    uploadProgress.value = { loaded, total, percent }
+  }
+
+  const getUploadCredentials = async (params: {
+    filename: string
+    fileSize: number
     folderId?: number | null
-  ): Promise<UploadConfig> => {
+    overwrite?: boolean
+  }): Promise<UploadConfig> => {
     const response = await $fetch<{ success: boolean; data: UploadConfig }>('/api/upload/credentials', {
       method: 'POST',
-      body: { filename, fileSize, folderId: folderId ?? null }
+      body: {
+        filename: params.filename,
+        fileSize: params.fileSize,
+        folderId: params.folderId ?? null,
+        overwrite: !!params.overwrite
+      }
     })
-
-    if (!response.success) {
-      throw new Error('获取上传凭证失败')
-    }
-
+    if (!response.success) throw new Error('获取上传凭证失败')
     return response.data
   }
 
-  // 新增参数 options.folderId：指定上传到的文件夹（null 表示根目录）
-  const uploadFile = async (file: File, options?: { folderId?: number | null }): Promise<string> => {
+  const uploadFile = async (file: File, options?: UploadOptions): Promise<string> => {
+    const partOfBatch = !!options?.partOfBatch
+    const folderId = options?.folderId ?? null
+    const overwrite = !!options?.overwrite
+
     try {
-      uploading.value = true
-      uploadError.value = ''
-      uploadProgress.value = { loaded: 0, total: file.size, percent: 0 }
+      if (!partOfBatch) {
+        uploading.value = true
+        uploadError.value = ''
+        setProgress(0, file.size)
+      }
 
-      const folderId = options?.folderId ?? null
+      const config = await getUploadCredentials({
+        filename: file.name,
+        fileSize: file.size,
+        folderId,
+        overwrite
+      })
 
-      // 获取上传凭证
-      const config = await getUploadCredentials(file.name, file.size, folderId)
-
-      // 演示模式
       if (config.demoMode) {
+        let lastLoaded = 0
         for (let i = 0; i <= 100; i += 10) {
-          uploadProgress.value = {
-            loaded: (file.size * i) / 100,
-            total: file.size,
-            percent: i
-          }
-          await new Promise(resolve => setTimeout(resolve, 100))
+          const loaded = Math.round((file.size * i) / 100)
+          const delta = Math.max(0, loaded - lastLoaded)
+          lastLoaded = loaded
+          options?.onProgressDelta?.(delta)
+          if (!partOfBatch) setProgress(loaded, file.size)
+          await new Promise(r => setTimeout(r, 100))
         }
-
         const fileUrl = `${config.uploadUrl}/${config.fileKey}`
-        
-        // 保存文件记录到数据库（带上 folderId）
         await $fetch('/api/files/save', {
           method: 'POST',
           body: {
@@ -84,14 +101,13 @@ export const useFileUpload = () => {
             fileSize: file.size,
             fileUrl: fileUrl,
             contentType: file.type,
-            folderId
+            folderId,
+            overwrite
           }
         })
-
         return fileUrl
       }
 
-      // 真实上传
       const cos = new COS({
         SecretId: config.credentials.TmpSecretId,
         SecretKey: config.credentials.TmpSecretKey,
@@ -99,21 +115,23 @@ export const useFileUpload = () => {
       })
 
       const fileUrl = await new Promise<string>((resolve, reject) => {
+        let lastLoaded = 0
         cos.putObject({
           Bucket: config.bucket,
           Region: config.region,
           Key: config.fileKey,
           Body: file,
           onProgress: (progressData: any) => {
-            uploadProgress.value = {
-              loaded: progressData.loaded,
-              total: progressData.total,
-              percent: Math.round((progressData.loaded / progressData.total) * 100)
-            }
+            const loaded = progressData?.loaded ?? 0
+            const total = progressData?.total ?? file.size
+            const delta = Math.max(0, loaded - lastLoaded)
+            lastLoaded = loaded
+            options?.onProgressDelta?.(delta)
+            if (!partOfBatch) setProgress(loaded, total)
           }
-        }, (err: any, data: any) => {
+        }, (err: any) => {
           if (err) {
-            uploadError.value = err.message || '上传失败'
+            if (!partOfBatch) uploadError.value = err.message || '上传失败'
             reject(err)
           } else {
             const url = `https://${config.bucket}.cos.${config.region}.myqcloud.com/${config.fileKey}`
@@ -122,7 +140,6 @@ export const useFileUpload = () => {
         })
       })
 
-      // 保存文件记录到数据库（带上 folderId）
       await $fetch('/api/files/save', {
         method: 'POST',
         body: {
@@ -132,31 +149,53 @@ export const useFileUpload = () => {
           fileSize: file.size,
           fileUrl: fileUrl,
           contentType: file.type,
-          folderId
+          folderId,
+          overwrite
         }
       })
 
       return fileUrl
+    } catch (error: any) {
+      if (!partOfBatch) uploadError.value = error.message || '上传失败'
+      throw error
+    } finally {
+      if (!partOfBatch) uploading.value = false
+    }
+  }
+
+  const uploadMultipleFiles = async (files: File[], options?: { folderId?: number | null; overwrite?: boolean }): Promise<string[]> => {
+    const results: string[] = []
+    const folderId = options?.folderId ?? null
+    const overwrite = !!options?.overwrite
+
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
+    let aggregatedLoaded = 0
+
+    uploading.value = true
+    uploadError.value = ''
+    setProgress(0, totalBytes)
+
+    try {
+      for (const file of files) {
+        const url = await uploadFile(file, {
+          folderId,
+          overwrite,
+          partOfBatch: true,
+          onProgressDelta: (delta: number) => {
+            aggregatedLoaded += delta
+            setProgress(aggregatedLoaded, totalBytes)
+          }
+        })
+        results.push(url)
+      }
+      setProgress(totalBytes, totalBytes)
+      return results
     } catch (error: any) {
       uploadError.value = error.message || '上传失败'
       throw error
     } finally {
       uploading.value = false
     }
-  }
-
-  const uploadMultipleFiles = async (files: File[], options?: { folderId?: number | null }): Promise<string[]> => {
-    const results: string[] = []
-    for (const file of files) {
-      try {
-        const url = await uploadFile(file, { folderId: options?.folderId ?? null })
-        results.push(url)
-      } catch (error) {
-        console.error(`上传文件 ${file.name} 失败:`, error)
-        throw error
-      }
-    }
-    return results
   }
 
   return {

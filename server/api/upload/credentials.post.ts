@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody(event)
-    const { filename, fileSize } = body
+    const { filename, fileSize, overwrite } = body
     const folderId = normalizeFolderId(body?.folderId)
 
     if (!filename) {
@@ -77,7 +77,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const size = Number(fileSize)
-    if (!Number.isFinite(size) || size <= 0) {
+    if (!Number.isFinite(size) || size < 0) {
       throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
     }
 
@@ -96,7 +96,29 @@ export default defineEventHandler(async (event) => {
 
     const usedStorage = Number(quotaRow.usedStorage ?? 0) || 0
     const maxStorage = Number(quotaRow.maxStorage ?? 0) || 0
-    if (maxStorage > 0 && usedStorage + size > maxStorage) {
+
+    // 若选择覆盖且存在同名文件，则抵扣旧文件大小
+    let usedForCheck = usedStorage
+    if (overwrite === true) {
+      let row: any
+      if (folderId === null) {
+        row = await db
+          .prepare('SELECT file_size FROM files WHERE user_id = ? AND folder_id IS NULL AND filename = ? LIMIT 1')
+          .bind(user.userId, filename)
+          .first()
+      } else {
+        row = await db
+          .prepare('SELECT file_size FROM files WHERE user_id = ? AND folder_id = ? AND filename = ? LIMIT 1')
+          .bind(user.userId, folderId, filename)
+          .first()
+      }
+      if (row?.file_size != null) {
+        usedForCheck = usedStorage - Number(row.file_size)
+        if (usedForCheck < 0) usedForCheck = 0
+      }
+    }
+
+    if (maxStorage > 0 && usedForCheck + size > maxStorage) {
       throw createError({ statusCode: 403, statusMessage: '存储空间不足，上传该文件将超出配额' })
     }
 
