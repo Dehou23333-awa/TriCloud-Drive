@@ -85,6 +85,12 @@
           >
             删除
           </button>
+          <button
+            class="text-sm text-gray-600 hover:text-gray-800"
+            @click.stop="renameFolder(folder)"
+          >
+            重命名
+          </button>
           <div class="flex items-center space-x-1 text-sm text-gray-400">
             进入
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,6 +128,12 @@
             class="text-sm text-blue-600 hover:text-blue-500"
           >
             下载
+          </button>
+          <button
+            @click="renameFile(file)"
+            class="text-sm text-gray-600 hover:text-gray-800"
+          >
+            重命名
           </button>
           <button
             @click="deleteFile(file)"
@@ -329,6 +341,86 @@ watch(currentFolderId, (id) => {
   emit('folder-change', id)
 }, { immediate: true })
 
+
+
+// 辅助：保留扩展名（如果用户未输入扩展名）
+const keepExtIfNone = (oldName: string, entered: string) => {
+  const trim = entered.trim()
+  if (!trim) return trim
+  const hasExt = /\.[^./\\]+$/.test(trim)  // 修正正则
+  if (hasExt) return trim
+  const oldExt = oldName.match(/\.[^./\\]+$/)?.[0] || ''  // 修正正则
+  return trim + oldExt
+}
+
+// 基础校验：名称非空、长度、非法字符
+const validateName = (name: string, isFolder = false) => {
+  if (!name || !name.trim()) return '名称不能为空'
+  if (name.length > 255) return '名称过长（最多255字符）'
+  if (/[\\/]/.test(name)) return '名称不可包含斜杠/反斜杠'  // 简化正则
+  if (isFolder && (name === '.' || name === '..')) return '非法的文件夹名称'
+  return ''
+}
+
+const renameFolder = async (folder: FolderRecord) => {
+  const entered = prompt('请输入新的文件夹名称：', folder.name)
+  if (entered == null) return
+  const newName = entered.trim()
+  const err = validateName(newName, true)
+  if (err) return alert(err)
+  if (newName === folder.name) return // 无改动视为成功
+
+  try {
+    const res = await $fetch<{ success: boolean; folder?: FolderRecord; message?: string }>('/api/folders/rename', {
+      method: 'POST',
+      body: { folderId: folder.id, newName }
+    })
+    if (!res.success) return alert(res.message || '重命名失败')
+
+    // 本地更新（避免整页刷新）
+    const idx = folders.value.findIndex(f => f.id === folder.id)
+    if (idx >= 0) folders.value[idx].name = newName
+
+    // 若这个文件夹在面包屑里（通常不是当前层），也一并更新
+    breadcrumbs.value = breadcrumbs.value.map(c => c.id === folder.id ? { ...c, name: newName } : c)
+  } catch (e: any) {
+    const msg = e?.data?.statusMessage || e?.data?.message || e?.message
+    if (msg?.includes('UNIQUE') || msg?.includes('已存在')) {
+      alert('同一目录下已存在同名文件夹')
+    } else {
+      alert(msg || '重命名失败')
+    }
+  }
+}
+
+const renameFile = async (file: FileRecord) => {
+  const entered = prompt('请输入新的文件名：', file.filename)
+  if (entered == null) return
+  // 默认保留扩展名（如果用户没输入扩展名）
+  const finalName = keepExtIfNone(file.filename, entered)
+  const err = validateName(finalName, false)
+  if (err) return alert(err)
+  if (finalName === file.filename) return
+
+  try {
+    const res = await $fetch<{ success: boolean; file?: FileRecord; message?: string }>('/api/files/rename', {
+      method: 'POST',
+      body: { fileId: file.id, newName: finalName }
+    })
+    if (!res.success) return alert(res.message || '重命名失败')
+
+    // 本地更新
+    const idx = files.value.findIndex(f => f.id === file.id)
+    if (idx >= 0) files.value[idx].filename = finalName
+  } catch (e: any) {
+    const msg = e?.data?.statusMessage || e?.data?.message || e?.message
+    if (msg?.includes('UNIQUE') || msg?.includes('已存在')) {
+      alert('当前文件夹内已存在同名文件')
+    } else {
+      alert(msg || '重命名失败')
+    }
+  }
+}
 
 onMounted(() => {
   fetchFiles()
