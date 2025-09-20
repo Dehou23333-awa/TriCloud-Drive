@@ -85,6 +85,18 @@
                 <dt class="text-sm font-medium text-gray-500">用户ID</dt>
                 <dd class="text-sm text-gray-900">{{ user?.id }}</dd>
               </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">存储已使用</dt>
+                <dd class="text-sm text-gray-900">{{ formatFileSize(user?.usedStorage) }}/{{ formatFileSize(user?.maxStorage) }}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">下载已使用</dt>
+                <dd class="text-sm text-gray-900">{{ formatFileSize(user?.usedDownload) }}/{{ formatFileSize(user?.maxDownload) }}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500">到期时间</dt>
+                <dd class="text-sm text-gray-900">{{ formatToUTC8(user?.expire_at) }}</dd>
+              </div>
             </dl>
           </div>
           <!-- 文件上传：把当前文件夹 ID 传进去 -->
@@ -118,6 +130,13 @@ const handleLogout = async () => { await logout() }
 
 const handleFileUploaded = () => {
   fileListRef.value?.refreshFiles()
+}
+const formatFileSize = (bytes: number | undefined): string => {
+  if (bytes === undefined || bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 import { formatToUTC8 } from '~/server/utils/time'

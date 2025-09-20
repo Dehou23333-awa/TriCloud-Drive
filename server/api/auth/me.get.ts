@@ -33,7 +33,12 @@ export default defineEventHandler(async (event) => {
         id: user.id,
         email: user.email,
         username: user.username,
-        created_at: user.created_at
+        created_at: user.created_at,
+        usedStorage: user.usedStorage,
+        maxStorage: user.maxStorage,
+        usedDownload: user.usedDownload,
+        maxDownload: user.maxDownload,
+        expire_at: user.expire_at
       }
     }
   } catch (error: any) {

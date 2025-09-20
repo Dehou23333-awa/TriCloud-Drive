@@ -10,6 +10,7 @@ export interface User {
   maxStorage: number
   usedDownload: number
   maxDownload: number
+  expire_at: string
 }
 
 export interface Database {
