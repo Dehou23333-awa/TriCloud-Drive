@@ -19,6 +19,9 @@ export default defineNuxtConfig({
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
         }
       }
+    },
+    externals: {
+      inline: []
     }
   },
 
@@ -40,6 +43,16 @@ export default defineNuxtConfig({
     public: {
       apiBase: '',
       allowRegister: process.env.ALLOW_REGISTER === 'true'
+    }
+  },
+  build: {
+    transpile: ['@zip.js/zip.js', 'streamsaver']
+  },
+  vite: {
+    optimizeDeps: {
+      // 重要：不要预打包 @zip.js/zip.js，避免 dev 时 esbuild 选到 Node 条件
+      exclude: ['@zip.js/zip.js']
+      // 不要 include '@zip.js/zip.js'
     }
   }
 })
