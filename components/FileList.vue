@@ -2,6 +2,16 @@
   <div class="bg-white rounded-lg shadow p-6">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
+        <!-- 全选 -->
+        <input
+          ref="masterCheckboxRef"
+          type="checkbox"
+          class="h-4 w-4 text-indigo-600 rounded border-gray-300"
+          :checked="isAllSelected"
+          :disabled="!hasItems"
+          @change="toggleSelectAll"
+          title="全选/全不选"
+        />
         <h3 class="text-lg font-medium text-gray-900">我的文件</h3>
         <!-- 面包屑 -->
         <nav class="text-sm text-gray-500">
@@ -19,6 +29,23 @@
         <button class="text-sm text-gray-600 hover:text-gray-800" v-if="breadcrumbs.length > 1" @click="goUp">
           返回上一级
         </button>
+
+        <!-- 批量操作 -->
+        <button
+          class="text-sm text-red-600 hover:text-red-500 disabled:opacity-50"
+          :disabled="selectedCount === 0 || bulkDeleting"
+          @click="deleteSelected"
+        >
+          删除
+        </button>
+        <button
+          class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
+          :disabled="selectedCount === 0 || bulkDownloading"
+          @click="downloadSelected"
+        >
+          下载
+        </button>
+
         <button class="text-sm text-indigo-600 hover:text-indigo-500" @click="createFolder">
           新建文件夹
         </button>
@@ -47,13 +74,22 @@
       <!-- 文件夹 -->
       <div v-for="folder in folders" :key="'folder-' + folder.id"
         class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-        <div class="flex items-center space-x-3 cursor-pointer" @click="navigateToFolder(folder)">
-          <div class="flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <!-- 选择复选框 -->
+          <input
+            type="checkbox"
+            class="h-4 w-4 text-indigo-600 rounded border-gray-300"
+            :checked="selectedFolderIds.has(folder.id)"
+            @change.stop="toggleSelectFolder(folder)"
+            @click.stop
+            :title="`选择文件夹：${folder.name}`"
+          />
+          <div class="flex-shrink-0 cursor-pointer" @click="navigateToFolder(folder)">
             <svg class="h-8 w-8 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
               <path d="M2 6a2 2 0 012-2h3l2 2h7a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
             </svg>
           </div>
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 cursor-pointer" @click="navigateToFolder(folder)">
             <p class="text-sm font-medium text-gray-900 truncate">
               {{ folder.name }}
             </p>
@@ -73,7 +109,7 @@
           <button class="text-sm text-gray-600 hover:text-gray-800" @click.stop="renameFolder(folder)">
             重命名
           </button>
-          <div class="flex items-center space-x-1 text-sm text-gray-400">
+          <div class="flex items-center space-x-1 text-sm text-gray-400 cursor-pointer" @click="navigateToFolder(folder)">
             进入
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -86,6 +122,15 @@
       <div v-for="file in files" :key="'file-' + file.id"
         class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
         <div class="flex items-center space-x-3">
+          <!-- 选择复选框 -->
+          <input
+            type="checkbox"
+            class="h-4 w-4 text-indigo-600 rounded border-gray-300"
+            :checked="selectedFileIds.has(file.id)"
+            @change.stop="toggleSelectFile(file)"
+            @click.stop
+            :title="`选择文件：${file.filename}`"
+          />
           <div class="flex-shrink-0">
             <svg class="h-8 w-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd"
@@ -161,6 +206,56 @@ const breadcrumbs = ref<{ id: number | null; name: string }[]>([
 
 const hasItems = computed(() => folders.value.length + files.value.length > 0)
 
+/* ========== 新增：选择状态/全选 ========== */
+const masterCheckboxRef = ref<HTMLInputElement | null>(null)
+const selectedFolderIds = ref<Set<number>>(new Set())
+const selectedFileIds = ref<Set<number>>(new Set())
+
+const totalItemCount = computed(() => folders.value.length + files.value.length)
+const selectedCount = computed(() => selectedFolderIds.value.size + selectedFileIds.value.size)
+const isAllSelected = computed(() => totalItemCount.value > 0 && selectedCount.value === totalItemCount.value)
+const isIndeterminate = computed(() => selectedCount.value > 0 && selectedCount.value < totalItemCount.value)
+
+const clearSelection = () => {
+  selectedFolderIds.value = new Set()
+  selectedFileIds.value = new Set()
+}
+
+const reconcileSelection = () => {
+  // 刷新时尽量保留当前目录中仍存在的选择项
+  const folderSet = new Set(folders.value.map(f => f.id))
+  const fileSet = new Set(files.value.map(f => f.id))
+  selectedFolderIds.value = new Set([...selectedFolderIds.value].filter(id => folderSet.has(id)))
+  selectedFileIds.value = new Set([...selectedFileIds.value].filter(id => fileSet.has(id)))
+}
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    clearSelection()
+  } else {
+    selectedFolderIds.value = new Set(folders.value.map(f => f.id))
+    selectedFileIds.value = new Set(files.value.map(f => f.id))
+  }
+}
+const toggleSelectFolder = (folder: FolderRecord) => {
+  const set = new Set(selectedFolderIds.value)
+  if (set.has(folder.id)) set.delete(folder.id)
+  else set.add(folder.id)
+  selectedFolderIds.value = set
+}
+const toggleSelectFile = (file: FileRecord) => {
+  const set = new Set(selectedFileIds.value)
+  if (set.has(file.id)) set.delete(file.id)
+  else set.add(file.id)
+  selectedFileIds.value = set
+}
+
+// 控制“半选”样式
+watch(isIndeterminate, (v) => {
+  if (masterCheckboxRef.value) masterCheckboxRef.value.indeterminate = v
+}, { immediate: true })
+
+/* ========== 原有：获取列表 ========== */
 const fetchFiles = async () => {
   try {
     loading.value = true
@@ -179,6 +274,7 @@ const fetchFiles = async () => {
       folders.value = response.folders || []
       files.value = response.files || []
       currentFolderId.value = response.currentFolderId ?? null
+      reconcileSelection() // 刷新时尽可能保持已选
     }
   } catch (error) {
     console.error('获取文件列表失败:', error)
@@ -192,6 +288,7 @@ const refreshFiles = () => {
 }
 
 const navigateToFolder = (folder: FolderRecord) => {
+  clearSelection()
   currentFolderId.value = folder.id
   breadcrumbs.value.push({ id: folder.id, name: folder.name })
   fetchFiles()
@@ -200,6 +297,7 @@ const navigateToFolder = (folder: FolderRecord) => {
 const goUp = () => {
   if (breadcrumbs.value.length <= 1) return
   breadcrumbs.value.pop()
+  clearSelection()
   currentFolderId.value = breadcrumbs.value[breadcrumbs.value.length - 1].id
   fetchFiles()
 }
@@ -207,6 +305,7 @@ const goUp = () => {
 const goToBreadcrumb = (index: number) => {
   if (index < 0 || index >= breadcrumbs.value.length) return
   breadcrumbs.value.splice(index + 1)
+  clearSelection()
   currentFolderId.value = breadcrumbs.value[index].id
   fetchFiles()
 }
@@ -256,6 +355,8 @@ const deleteFile = async (file: FileRecord) => {
     })
     if (response.success) {
       files.value = files.value.filter(f => f.id !== file.id)
+      // 同步清理已选
+      selectedFileIds.value = new Set([...selectedFileIds.value].filter(id => id !== file.id))
       alert('文件删除成功')
     } else {
       alert('删除失败：' + response.message)
@@ -279,7 +380,6 @@ const createFolder = async () => {
       body: { name, parentId: currentFolderId.value ?? null }
     })
     if (res.success) {
-      // 也可以 push 到本地列表，这里直接刷新以确保一致性
       await fetchFiles()
     } else {
       alert(res.message || '创建失败')
@@ -299,9 +399,9 @@ const deleteFolder = async (folder: FolderRecord) => {
     })
     if (res.success) {
       folders.value = folders.value.filter(f => f.id !== folder.id)
+      // 同步清理已选
+      selectedFolderIds.value = new Set([...selectedFolderIds.value].filter(id => id !== folder.id))
       alert('文件夹删除成功')
-      // 可选：刷新（如果你担心并发或统计）
-      // await fetchFiles()
     } else {
       alert(res.message || '删除失败')
     }
@@ -314,8 +414,6 @@ const emit = defineEmits<{ 'folder-change': [number | null] }>()
 watch(currentFolderId, (id) => {
   emit('folder-change', id)
 }, { immediate: true })
-
-
 
 // 辅助：保留扩展名（如果用户未输入扩展名）
 const keepExtIfNone = (oldName: string, entered: string) => {
@@ -396,8 +494,6 @@ const renameFile = async (file: FileRecord) => {
   }
 }
 
-
-
 const downloadingFolderId = ref<number | null>(null)
 
 const downloadFolder = async (folder: FolderRecord) => {
@@ -461,31 +557,25 @@ const downloadFolder = async (folder: FolderRecord) => {
         suggestedName: zipName,
         types: [{ description: 'ZIP', accept: { 'application/zip': ['.zip'] } }]
       })
-      // File System Access API 的句柄本身就是标准 WritableStream
       outStream = await handle.createWritable()
     } else {
       const mod = await import('streamsaver')
       const streamSaver = (mod as any).default || mod
-      // 若自托管，请改为 '/streamsaver/mitm.html'
       streamSaver.mitm = 'https://jimmywarting.github.io/StreamSaver.js/mitm.html'
       outStream = streamSaver.createWriteStream(zipName) as unknown as WritableStream
     }
 
-    // 3) 使用 ZipWriterStream（不依赖 WritableStreamWriter/ReadableStreamReader）
     const zip = await import('@zip.js/zip.js')
-    const { ZipWriter, configure } = zip as any // <-- Note: ZipWriter, not ZipWriterStream
+    const { ZipWriter, configure } = zip as any
     if (!ZipWriter) {
       console.error('zip module exports:', Object.keys(zip as any))
       throw new Error('ZipWriter 不可用，请确认 @zip.js/zip.js 版本')
     }
-    // 避免 worker 路径问题
     if (typeof configure === 'function') configure({ useWebWorkers: false })
 
-    // 创建 ZipWriter：它直接接收目标输出流作为参数
-    const zipWriter = new ZipWriter(outStream, { zip64: true }) // <-- Pass outStream here directly!
+    const zipWriter = new ZipWriter(outStream, { zip64: true })
 
     for (const item of manifest.files) {
-      // 每个文件都走你的签名接口（会进行额度强校验/预占）
       const signed = await $fetch<{ success: boolean; data: { downloadUrl: string } }>('/api/files/download', {
         method: 'POST',
         body: { fileKey: item.fileKey, filename: item.filename }
@@ -495,29 +585,194 @@ const downloadFolder = async (folder: FolderRecord) => {
       const res = await fetch(signed.data.downloadUrl, { mode: 'cors' })
       if (!res.ok) throw new Error(`获取文件失败: ${item.filename}`)
 
-      // 读取源流。部分浏览器可能没有 res.body，则退化为 blob.stream()（会占用内存，极端兜底）
       const srcStream = res.body || (await res.blob()).stream()
-
       const entryPath = [folder.name, item.relDir, item.filename].filter(Boolean).join('/')
 
-      // 将条目写入 zip：name + 该文件的 ReadableStream。level 不传为默认压缩；如需极速可加 level: 0
       await zipWriter.write({
         name: entryPath,
         stream: srcStream,
-        // level: 0, // 需要更快/更省 CPU 时打开
       })
     }
 
-    // 所有条目写完，关闭 zip 的输入端，然后等待管道完成
     await zipWriter.close()
-    //await piping
-
     alert('打包完成，已保存。')
   } catch (e: any) {
     console.error('文件夹下载失败:', e)
     alert(e?.message || '文件夹下载失败，请稍后重试')
   } finally {
     downloadingFolderId.value = null
+  }
+}
+
+/* ========== 新增：批量删除/下载 ========== */
+const bulkDeleting = ref(false)
+const bulkDownloading = ref(false)
+
+const deleteSelected = async () => {
+  if (selectedCount.value === 0) return
+  const fileIds = Array.from(selectedFileIds.value)
+  const folderIds = Array.from(selectedFolderIds.value)
+
+  const ok = confirm(
+    `确定要删除选中的 ${folderIds.length} 个文件夹和 ${fileIds.length} 个文件吗？\n` +
+    `删除文件夹将同时删除其所有子内容，操作不可恢复。`
+  )
+  if (!ok) return
+
+  bulkDeleting.value = true
+  try {
+    const fileTasks = fileIds.map(id =>
+      $fetch<{ success: boolean; message?: string }>('/api/files/delete', {
+        method: 'POST',
+        body: { fileId: id }
+      }).then(res => ({ ok: res.success, id, type: 'file', message: res.message }))
+        .catch(e => ({ ok: false, id, type: 'file', message: e?.data?.message || e?.message }))
+    )
+    const folderTasks = folderIds.map(id =>
+      $fetch<{ success: boolean; message?: string }>('/api/folders/delete', {
+        method: 'POST',
+        body: { folderId: id }
+      }).then(res => ({ ok: res.success, id, type: 'folder', message: res.message }))
+        .catch(e => ({ ok: false, id, type: 'folder', message: e?.data?.message || e?.message }))
+    )
+
+    const results = await Promise.all([...fileTasks, ...folderTasks])
+
+    const okFileIds = results.filter(r => r.ok && r.type === 'file').map(r => r.id as number)
+    const okFolderIds = results.filter(r => r.ok && r.type === 'folder').map(r => r.id as number)
+    if (okFileIds.length) files.value = files.value.filter(f => !okFileIds.includes(f.id))
+    if (okFolderIds.length) folders.value = folders.value.filter(f => !okFolderIds.includes(f.id))
+
+    // 清理选择
+    selectedFileIds.value = new Set([...selectedFileIds.value].filter(id => !okFileIds.includes(id)))
+    selectedFolderIds.value = new Set([...selectedFolderIds.value].filter(id => !okFolderIds.includes(id)))
+
+    const failed = results.filter(r => !r.ok)
+    if (failed.length) {
+      alert(`部分删除失败：${failed.length} 项。\n` + failed.slice(0, 5).map(r =>
+        `${r.type === 'folder' ? '文件夹' : '文件'} #${r.id}: ${r.message || '失败'}`
+      ).join('\n'))
+    } else {
+      alert('删除成功')
+    }
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+const downloadSelected = async () => {
+  if (selectedCount.value === 0) return
+  bulkDownloading.value = true
+
+  try {
+    const selectedFolders = folders.value.filter(f => selectedFolderIds.value.has(f.id))
+    const selectedFilesArr = files.value.filter(f => selectedFileIds.value.has(f.id))
+
+    // 仅文件：逐个直下下载
+    if (selectedFolders.length === 0) {
+      for (const f of selectedFilesArr) {
+        await downloadFile(f)
+      }
+      return
+    }
+
+    // 含有文件夹：统一打包
+    if (typeof window === 'undefined') {
+      alert('请在浏览器中进行下载操作')
+      return
+    }
+
+    type ManifestResp = {
+      success: boolean
+      folder: { id: number; name: string }
+      files: { id: number; filename: string; fileKey: string; fileSize: number; relDir: string }[]
+      totals: { count: number; bytes: number }
+      precheck: any
+    }
+
+    const manifests = await Promise.all(
+      selectedFolders.map((folder) =>
+        $fetch<ManifestResp>('/api/folders/manifest', {
+          method: 'GET',
+          params: { folderId: folder.id }
+        })
+      )
+    )
+
+    const totalBytesFolders = manifests.reduce((acc, m) => acc + (m.totals?.bytes || 0), 0)
+    const totalBytesFiles = selectedFilesArr.reduce((acc, f) => acc + (f.fileSize || 0), 0)
+    const totalBytes = totalBytesFolders + totalBytesFiles
+
+    const zipName = (selectedFolders.length === 1 && selectedFilesArr.length === 0)
+      ? `${selectedFolders[0].name}.zip`
+      : '选中项.zip'
+
+    const go = confirm(
+      `将打包下载 ${selectedFolders.length} 个文件夹和 ${selectedFilesArr.length} 个文件，` +
+      `共约 ${formatFileSize(totalBytes)}。继续？`
+    )
+    if (!go) return
+
+    // 输出流
+    const canFSA = 'showSaveFilePicker' in window
+    let outStream: WritableStream
+    if (canFSA) {
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: zipName,
+        types: [{ description: 'ZIP', accept: { 'application/zip': ['.zip'] } }]
+      })
+      outStream = await handle.createWritable()
+    } else {
+      const mod = await import('streamsaver')
+      const streamSaver = (mod as any).default || mod
+      streamSaver.mitm = 'https://jimmywarting.github.io/StreamSaver.js/mitm.html'
+      outStream = streamSaver.createWriteStream(zipName) as unknown as WritableStream
+    }
+
+    const zip = await import('@zip.js/zip.js')
+    const { ZipWriter, configure } = zip as any
+    if (typeof configure === 'function') configure({ useWebWorkers: false })
+    const zipWriter = new ZipWriter(outStream, { zip64: true })
+
+    // 写入函数
+    const addEntryFromSignedUrl = async (downloadUrl: string, entryPath: string) => {
+      const res = await fetch(downloadUrl, { mode: 'cors' })
+      if (!res.ok) throw new Error(`获取文件失败: ${entryPath}`)
+      const srcStream = res.body || (await res.blob()).stream()
+      await zipWriter.write({ name: entryPath, stream: srcStream })
+    }
+
+    // 文件夹条目
+    for (const manifest of manifests) {
+      if (!manifest?.success) continue
+      for (const item of manifest.files) {
+        const signed = await $fetch<{ success: boolean; data: { downloadUrl: string } }>('/api/files/download', {
+          method: 'POST',
+          body: { fileKey: item.fileKey, filename: item.filename }
+        })
+        if (!signed?.success) throw new Error(`签名失败: ${item.filename}`)
+        const entryPath = [manifest.folder.name, item.relDir, item.filename].filter(Boolean).join('/')
+        await addEntryFromSignedUrl(signed.data.downloadUrl, entryPath)
+      }
+    }
+
+    // 单独选中的文件（放在 zip 根目录）
+    for (const file of selectedFilesArr) {
+      const signed = await $fetch<{ success: boolean; data: { downloadUrl: string } }>('/api/files/download', {
+        method: 'POST',
+        body: { fileKey: file.fileKey, filename: file.filename }
+      })
+      if (!signed?.success) throw new Error(`签名失败: ${file.filename}`)
+      await addEntryFromSignedUrl(signed.data.downloadUrl, file.filename)
+    }
+
+    await zipWriter.close()
+    alert('打包完成，已保存。')
+  } catch (e: any) {
+    console.error('批量下载失败:', e)
+    alert(e?.message || '批量下载失败，请稍后重试')
+  } finally {
+    bulkDownloading.value = false
   }
 }
 
