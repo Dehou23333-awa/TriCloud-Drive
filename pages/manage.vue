@@ -363,7 +363,7 @@ type ApiUser = Omit<DbUser, 'usedStorage' | 'maxStorage' | 'usedDownload' | 'max
   maxDownload: number
 }
 
-const { user, isLoggedIn, logout, register, isAdminOrSuperAdmin } = useAuth()
+const { user, isLoggedIn, logout, register} = useAuth()
 
 const handleLogout = async () => {
   await logout()
@@ -389,7 +389,7 @@ const addError = ref('')
 
 const updatingId = ref<number | null>(null)
 
-const canManage = ref(false)
+const canManage = ref(!!user.value?.IsAdmin || !!user.value?.IsSuperAdmin)
 
 // 删除相关状态
 const deletingId = ref<number | null>(null)
@@ -425,10 +425,6 @@ const deleteUser = async (u: DbUser) => {
   }
 }
 
-onMounted(async () => {
-  canManage.value = await isAdminOrSuperAdmin()
-  return canManage.value
-})
 
 /* -------- 工具：容量格式化/解析 -------- */
 

@@ -34,6 +34,8 @@ export default defineEventHandler(async (event) => {
         email: user.email,
         username: user.username,
         created_at: user.created_at,
+        IsAdmin: user.IsAdmin,
+        IsSuperAdmin: user.IsSuperAdmin,
         usedStorage: user.usedStorage,
         maxStorage: user.maxStorage,
         usedDownload: user.usedDownload,

@@ -39,6 +39,7 @@ export const useAuth = () => {
       user.value = null
     }
   }
+  /*
   const isAdminOrSuperAdmin =  async () => {
     try {
       const headers = process.server ? useRequestHeaders(['cookie']) : undefined
@@ -54,7 +55,7 @@ export const useAuth = () => {
     } catch {
       return false
     }
-  }
+  }*/
 
   return {
     user: readonly(user),
@@ -63,6 +64,5 @@ export const useAuth = () => {
     register,
     logout,
     fetchUser,
-    isAdminOrSuperAdmin,
   }
 }

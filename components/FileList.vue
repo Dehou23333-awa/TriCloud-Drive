@@ -25,6 +25,7 @@
         </nav>
       </div>
 
+      <!-- 顶部工具栏 -->
       <div class="flex items-center gap-3">
         <button class="text-sm text-gray-600 hover:text-gray-800" v-if="breadcrumbs.length > 1" @click="handleGoUp">
           返回上一级
@@ -45,7 +46,8 @@
         >
           下载
         </button>
-        <!-- 顶部：剪贴 / 粘贴 -->
+
+        <!-- 顶部：剪贴 / 复制 / 粘贴 -->
         <button
           class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
           :disabled="selectedCount === 0"
@@ -56,17 +58,26 @@
         </button>
 
         <button
+          class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
+          :disabled="selectedCount === 0"
+          @click="copySelection"
+          title="复制所选项目（拷贝）"
+        >
+          复制
+        </button>
+
+        <button
           class="text-sm text-green-600 hover:text-green-500 disabled:opacity-50"
           :disabled="!hasClipboard || pasting"
           @click="pasteClipboard"
-          title="粘贴到当前文件夹"
+          :title="clipboard?.mode === 'cut' ? '移动到当前文件夹' : '复制到当前文件夹'"
         >
-          {{ pasting ? '移动中...' : '粘贴' }}
+          {{ pasteBtnText }}
         </button>
 
         <!-- 剪贴板计数提示 -->
         <span v-if="hasClipboard" class="text-xs text-gray-500">
-          已剪贴 {{ clipboardCount }} 项
+          {{ clipboardActionLabel }} {{ clipboardCount }} 项
         </span>
 
         <button class="text-sm text-indigo-600 hover:text-indigo-500" @click="createFolder">
@@ -135,6 +146,9 @@
           <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="clipFolder(folder)">
             剪贴
           </button>
+          <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="copyFolder(folder)">
+            复制
+          </button>
           <div class="flex items-center space-x-1 text-sm text-gray-400 cursor-pointer" @click="handleNavigateToFolder(folder)">
             进入
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -187,6 +201,9 @@
           <button @click="clipFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500">
             剪贴
           </button>
+          <button @click="copyFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500">
+            复制
+          </button>
         </div>
       </div>
     </div>
@@ -214,6 +231,28 @@ import { formatFileSize } from '~/utils/format'
 import { FilesService } from '~/services/files.service'
 import { FoldersService } from '~/services/folders.service'
 import { createZipSink } from '~/utils/zipper'
+import { CopyService } from '~/services/copy.service' // 新增：复制服务
+
+type ClipboardPayload = {
+  mode: 'cut' | 'copy'       // 新增
+  folderIds: number[]
+  fileIds: number[]
+  fromFolderId: number | null
+}
+
+const clipboard = ref<ClipboardPayload | null>(null)
+const pasting = ref(false)
+
+const hasClipboard = computed(() => {
+  const c = clipboard.value
+  return !!c && (c.folderIds.length + c.fileIds.length) > 0
+})
+const clipboardCount = computed(() => {
+  const c = clipboard.value
+  return c ? (c.folderIds.length + c.fileIds.length) : 0
+})
+
+
 
 interface FolderRecord {
   id: number
@@ -270,6 +309,101 @@ const handleGoUp = () => {
 const handleGoToBreadcrumb = (index: number) => {
   clearSelection()
   goToBreadcrumb(index)
+}
+
+const clipboardActionLabel = computed(() => {
+  if (!clipboard.value) return ''
+  return clipboard.value.mode === 'cut' ? '已剪贴' : '已复制'
+})
+
+const pasteBtnText = computed(() =>
+  pasting.value
+    ? (clipboard.value?.mode === 'cut' ? '移动中...' : '复制中...')
+    : '粘贴'
+)
+
+/* 顶部按钮：剪贴 */
+const clipSelection = () => {
+  if (selectedCount.value === 0) return
+  clipboard.value = {
+    mode: 'cut',
+    folderIds: Array.from(selectedFolderIds.value),
+    fileIds: Array.from(selectedFileIds.value),
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+/* 顶部按钮：复制 */
+const copySelection = () => {
+  if (selectedCount.value === 0) return
+  clipboard.value = {
+    mode: 'copy',
+    folderIds: Array.from(selectedFolderIds.value),
+    fileIds: Array.from(selectedFileIds.value),
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+
+/* 单个项目：剪贴/复制 */
+const clipFolder = (folder: FolderRecord) => {
+  clipboard.value = {
+    mode: 'cut',
+    folderIds: [folder.id],
+    fileIds: [],
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+const copyFolder = (folder: FolderRecord) => {
+  clipboard.value = {
+    mode: 'copy',
+    folderIds: [folder.id],
+    fileIds: [],
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+const clipFile = (file: FileRecord) => {
+  clipboard.value = {
+    mode: 'cut',
+    folderIds: [],
+    fileIds: [file.id],
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+const copyFile = (file: FileRecord) => {
+  clipboard.value = {
+    mode: 'copy',
+    folderIds: [],
+    fileIds: [file.id],
+    fromFolderId: currentFolderId.value ?? null
+  }
+}
+
+/* 粘贴（根据 mode 调用不同服务） */
+const pasteClipboard = async () => {
+  if (!hasClipboard.value || pasting.value) return
+  pasting.value = true
+  try {
+    const targetFolderId = currentFolderId.value ?? null
+    const c = clipboard.value!
+
+    const res = c.mode === 'cut'
+      ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds)
+      : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds)
+
+    if (!res?.success) {
+      return alert(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'))
+    }
+
+    clipboard.value = null
+    clearSelection()
+    await fetchFiles()
+    // 可选：提示
+    // const action = c.mode === 'cut' ? '已移动' : '已复制'
+    // alert(`${action} 文件夹 ${res?.affected?.folders ?? 0} 个，文件 ${res?.affected?.files ?? 0} 个，共 ${formatFileSize(res?.affected?.bytes ?? 0)}`)
+  } catch (e: any) {
+    alert(e?.message || '粘贴失败，请稍后重试')
+  } finally {
+    pasting.value = false
+  }
 }
 
 /* 创建/重命名（保留在组件内，轻量即可） */
@@ -367,73 +501,7 @@ const downloadFolder = async (folder: FolderRecord) => {
     downloadingFolderId.value = null
   }
 }
-type ClipboardPayload = {
-  folderIds: number[]
-  fileIds: number[]
-  fromFolderId: number | null
-}
 
-const clipboard = ref<ClipboardPayload | null>(null)
-const pasting = ref(false)
-
-const hasClipboard = computed(() => {
-  const c = clipboard.value
-  return !!c && (c.folderIds.length + c.fileIds.length) > 0
-})
-const clipboardCount = computed(() => {
-  const c = clipboard.value
-  return c ? (c.folderIds.length + c.fileIds.length) : 0
-})
-
-const clipSelection = () => {
-  if (selectedCount.value === 0) return
-  clipboard.value = {
-    folderIds: Array.from(selectedFolderIds.value),
-    fileIds: Array.from(selectedFileIds.value),
-    fromFolderId: currentFolderId.value ?? null
-  }
-  // 可选：给点反馈
-  // alert(`已剪贴 ${clipboardCount.value} 项`)
-}
-
-const clipFolder = (folder: FolderRecord) => {
-  clipboard.value = {
-    folderIds: [folder.id],
-    fileIds: [],
-    fromFolderId: currentFolderId.value ?? null
-  }
-}
-
-const clipFile = (file: FileRecord) => {
-  clipboard.value = {
-    folderIds: [],
-    fileIds: [file.id],
-    fromFolderId: currentFolderId.value ?? null
-  }
-}
-
-const pasteClipboard = async () => {
-  if (!hasClipboard.value || pasting.value) return
-  pasting.value = true
-  try {
-    const targetFolderId = currentFolderId.value ?? null
-    const c = clipboard.value!
-    const res = await MoveService.paste(targetFolderId, c.folderIds, c.fileIds)
-    if (!res.success) {
-      return alert(res.message || '移动失败')
-    }
-    // 成功：清理剪贴板与选择，刷新列表
-    clipboard.value = null
-    clearSelection()
-    await fetchFiles()
-    // 可选反馈
-    // alert(`已移动 文件夹 ${res.moved?.folders ?? 0} 个，文件 ${res.moved?.files ?? 0} 个`)
-  } catch (e: any) {
-    alert(e?.message || '移动失败，请稍后重试')
-  } finally {
-    pasting.value = false
-  }
-}
 
 /* 向父组件暴露 */
 const emit = defineEmits<{ 'folder-change': [number | null] }>()

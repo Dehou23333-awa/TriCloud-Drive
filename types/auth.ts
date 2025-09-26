@@ -2,8 +2,8 @@ export interface User {
   id: number
   email: string
   created_at: string
-  isAdmin: boolean
-  isSuperAdmin: boolean
+  IsAdmin: boolean
+  IsSuperAdmin: boolean
   usedStorage: number
   maxStorage: number
   usedDownload: number

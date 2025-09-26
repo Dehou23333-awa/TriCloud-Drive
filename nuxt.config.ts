@@ -22,6 +22,11 @@ export default defineNuxtConfig({
     },
     externals: {
       inline: []
+    },
+    esbuild: {
+      options: {
+        target: 'es2020'
+      }
     }
   },
 
@@ -35,8 +40,8 @@ export default defineNuxtConfig({
     cdnDomain: process.env.CDN_DOMAIN || '',
     cdnEnabled: process.env.CDN_ENABLED === 'true',
     // CDN 鉴权配置
-    cdnAuthKeyPrimary: process.env.CDN_AUTH_KEY_PRIMARY || 'Xuw6iUKsInF4Cdh9ExWcrQQzaY78o',
-    cdnAuthKeyBackup: process.env.CDN_AUTH_KEY_BACKUP || 'zU0Aa8tR34fwZHpE9zef76UbD05',
+    cdnAuthKeyPrimary: process.env.CDN_AUTH_KEY_PRIMARY || 'cdn_auth_key_primary',
+    cdnAuthKeyBackup: process.env.CDN_AUTH_KEY_BACKUP || 'cdn_auth_key_backup',
     cdnAuthTtl: parseInt(process.env.CDN_AUTH_TTL || '10'), // 默认10秒
     cdnAuthParam: process.env.CDN_AUTH_PARAM || 'sign',
     dbPath: process.env.SQLITE_PATH || './data.sqlite',

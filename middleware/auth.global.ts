@@ -24,7 +24,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/')
   }
 
-  if (!await auth.isAdminOrSuperAdmin() && to.path.startsWith('/api/manage') )
+  if (!(auth.user.value?.IsAdmin || auth.user.value?.IsSuperAdmin) && to.path.startsWith('/api/manage') )
   {
     throw createError({ statusCode: 400, statusMessage: 'You are not authorized to access this page' })
   }
