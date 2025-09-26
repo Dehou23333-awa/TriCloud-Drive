@@ -35,3 +35,6 @@ wrangler.toml
 # database files
 *.sqlite
 *.sqlite3
+
+#batch
+start.bat

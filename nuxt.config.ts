@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   modules: ['@nuxtjs/tailwindcss'],
 
   nitro: {
-    preset: 'cloudflare-pages',
+    preset: 'node',
     experimental: {
       wasm: true
     },
