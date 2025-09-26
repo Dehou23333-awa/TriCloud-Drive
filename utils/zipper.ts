@@ -25,10 +25,11 @@ export async function createZipSink(zipName: string) {
   const writer = new ZipWriter(outStream, { zip64: true })
 
   const addFromUrl = async (entryPath: string, downloadUrl: string) => {
-    const res = await fetch(downloadUrl, { mode: 'cors' })
-    if (!res.ok) throw new Error(`获取文件失败: ${entryPath}`)
-    const srcStream = res.body || (await res.blob()).stream()
-    await writer.write({ name: entryPath, stream: srcStream })
+  if (typeof entryPath !== 'string') throw new Error('entryPath 必须是字符串')
+  await writer.add(
+      entryPath,
+      new zip.HttpReader(downloadUrl, { preventHeadRequest: true }) // 有些后端不支持 HEAD
+    )
   }
 
   return {
