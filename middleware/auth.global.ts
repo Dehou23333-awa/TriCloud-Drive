@@ -19,7 +19,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/login')
   }
 
-  // 可选：已登录就别进登录/注册页
+  // 可选：已登录就别进登录页
   if (auth.isLoggedIn.value && whitelist.has(to.path) && (to.path === '/login' || to.path === '/loginold')) {
     return navigateTo('/')
   }
