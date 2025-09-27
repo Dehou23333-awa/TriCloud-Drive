@@ -61,3 +61,10 @@ jobs:
             ./.output/start.*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Debug .output
+        shell: pwsh
+        run: |
+          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
+          Get-ChildItem -Force
+          if (Test-Path .output) { Get-ChildItem -Recurse -Force .output | Select-Object -First 20 }
