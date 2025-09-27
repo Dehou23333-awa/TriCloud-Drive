@@ -1,0 +1,69 @@
+name: Build - Nuxt 3 (Windows artifact)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.16.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (Nuxt SSR/Nitro)
+        env:
+          NODE_ENV: production
+          NUXT_TELEMETRY_DISABLED: 1
+        run: npm run build   # 产物在 .output/
+
+      # 可选：生成 Windows 启动脚本，拿到产物后双击即可跑
+      - name: Add Windows start scripts
+        shell: pwsh
+        run: |
+          $bat = @"
+          @echo off
+          if "%PORT%"=="" set PORT=3000
+          if "%NITRO_HOST%"=="" set NITRO_HOST=0.0.0.0
+          node "%~dp0server\index.mjs"
+          "@
+          Set-Content -Path ".output\start.bat" -Value $bat -Encoding ASCII
+
+          $ps1 = @'
+          if (-not $env:PORT) { $env:PORT = "3000" }
+          if (-not $env:NITRO_HOST) { $env:NITRO_HOST = "0.0.0.0" }
+          node "$PSScriptRoot\server\index.mjs"
+          '@
+          Set-Content -Path ".output\start.ps1" -Value $ps1 -Encoding ASCII
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-output-windows-node22
+          path: .output
+          retention-days: 7
+
+            # 可选：指定 MSVC 版本，确保 node-gyp 用 VS2022
+      - name: Pin MSVC version for node-gyp (optional)
+        shell: pwsh
+        run: npm config set msvs_version 2022
+
+      - name: Install dependencies
+        env:
+          # 如遇 bcrypt/sqlite3 等预编译二进制不匹配，可临时打开下一行强制源码编译
+          # npm_config_build_from_source: "true"
+        run: npm ci
