@@ -54,5 +54,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nuxt-output-windows-node22
-          path: .output
+          path: |
+            ./.output/server/**
+            ./.output/public/**
+            ./.output/package.json
+            ./.output/start.*
+          if-no-files-found: error
           retention-days: 7
