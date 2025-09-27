@@ -63,7 +63,7 @@ jobs:
         run: npm config set msvs_version 2022
 
       - name: Install dependencies
-        env:
+        #env:
           # 如遇 bcrypt/sqlite3 等预编译二进制不匹配，可临时打开下一行强制源码编译
           # npm_config_build_from_source: "true"
         run: npm ci
