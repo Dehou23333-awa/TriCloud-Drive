@@ -31,40 +31,45 @@ jobs:
           NUXT_TELEMETRY_DISABLED: 1
         run: npm run build   # 产物在 .output/
 
-      # 可选：生成 Windows 启动脚本，拿到产物后双击即可跑
-      - name: Add Windows start scripts
+      - name: Debug workspace and .output
         shell: pwsh
         run: |
-          $bat = @"
-          @echo off
-          if "%PORT%"=="" set PORT=3000
-          if "%NITRO_HOST%"=="" set NITRO_HOST=0.0.0.0
-          node "%~dp0server\index.mjs"
-          "@
-          Set-Content -Path ".output\start.bat" -Value $bat -Encoding ASCII
+          Write-Host "GITHUB_WORKSPACE = $env:GITHUB_WORKSPACE"
+          Get-ChildItem -Force | Select-Object Name,Length,Mode
+          if (Test-Path .output) {
+            Write-Host ".output exists, sample files:"
+            Get-ChildItem -Recurse -Force .output | Select-Object -First 20 FullName
+          } else {
+            Write-Host ".output NOT FOUND"
+          }
 
-          $ps1 = @'
-          if (-not $env:PORT) { $env:PORT = "3000" }
-          if (-not $env:NITRO_HOST) { $env:NITRO_HOST = "0.0.0.0" }
-          node "$PSScriptRoot\server\index.mjs"
-          '@
-          Set-Content -Path ".output\start.ps1" -Value $ps1 -Encoding ASCII
+      - name: Add Windows start scripts (robust)
+        shell: pwsh
+        run: |
+          if (!(Test-Path .output)) { throw ".output not found" }
+          @(
+            '@echo off'
+            'if "%PORT%"=="" set PORT=3000'
+            'if "%NITRO_HOST%"=="" set NITRO_HOST=0.0.0.0'
+            'node "%~dp0server\index.mjs"'
+          ) | Set-Content -Path ".output\start.bat" -Encoding ASCII
+
+          @(
+            'if (-not $env:PORT) { $env:PORT = "3000" }'
+            'if (-not $env:NITRO_HOST) { $env:NITRO_HOST = "0.0.0.0" }'
+            'node "$PSScriptRoot\server\index.mjs"'
+          ) | Set-Content -Path ".output\start.ps1" -Encoding ASCII
+
+      - name: Zip .output
+        shell: pwsh
+        run: |
+          if (!(Test-Path .output)) { throw ".output not found before zip" }
+          Compress-Archive -Path .output\* -DestinationPath nuxt-output-windows-node22.zip -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: nuxt-output-windows-node22
-          path: |
-            ./.output/server/**
-            ./.output/public/**
-            ./.output/package.json
-            ./.output/start.*
+          path: ${{ github.workspace }}/nuxt-output-windows-node22.zip
           if-no-files-found: error
           retention-days: 7
-
-      - name: Debug .output
-        shell: pwsh
-        run: |
-          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
-          Get-ChildItem -Force
-          if (Test-Path .output) { Get-ChildItem -Recurse -Force .output | Select-Object -First 20 }
