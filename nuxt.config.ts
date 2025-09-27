@@ -20,7 +20,7 @@ export default defineNuxtConfig({
       }
     },
     externals: {
-      inline: []
+      inline: ['jsonwebtoken', 'semver']
     },
     esbuild: {
       options: {
