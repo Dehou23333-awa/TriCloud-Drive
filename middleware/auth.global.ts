@@ -9,7 +9,14 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // 注册开关
   if (allowRegister === false && to.path === '/register') {
-    return navigateTo('/')
+    if (!auth.isLoggedIn.value)
+    {
+      return navigateTo('/')
+    }
+    else if (!auth.user.value?.IsAdmin && !auth.user.value?.IsSuperAdmin)
+    {
+      return navigateTo('/')
+    }
   }
 
   const whitelist = new Set(['/', '/login', '/loginold', '/registerold', '/register'])
