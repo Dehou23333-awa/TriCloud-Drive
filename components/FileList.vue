@@ -84,33 +84,46 @@
         </span>
 
         <!-- 上传按钮（悬浮菜单） -->
-        <div class="relative group">
-          <button class="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
+        <div
+          class="relative"
+          ref="uploadMenuRef"
+          @mouseenter="openUploadMenu"
+          @mouseleave="scheduleCloseUploadMenu"
+        >
+          <button
+            class="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+            @click.stop="toggleUploadMenu"
+          >
             上传
           </button>
-          <div
-            class="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-md shadow-lg
-                   opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition"
-          >
-            <button
-              class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              @click="fileInputRef?.click()"
+
+          <transition name="fade-slide">
+            <div
+              v-show="showUploadMenu"
+              class="absolute right-0 mt-2 w-44 z-20 bg-white border border-gray-200 rounded-md shadow-lg"
+              @mouseenter="openUploadMenu"
+              @mouseleave="scheduleCloseUploadMenu"
             >
-              上传文件
-            </button>
-            <button
-              class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              @click="folderInputRef?.click()"
-            >
-              上传文件夹
-            </button>
-            <div class="px-4 py-2 border-t border-gray-100">
-              <label class="flex items-center gap-2 text-xs text-gray-600">
-                <input type="checkbox" v-model="overwriteExisting" class="rounded border-gray-300" />
-                同名时覆盖
-              </label>
+              <button
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                @click="fileInputRef?.click()"
+              >
+                上传文件
+              </button>
+              <button
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                @click="folderInputRef?.click()"
+              >
+                上传文件夹
+              </button>
+              <div class="px-4 py-2 border-t border-gray-100">
+                <label class="flex items-center gap-2 text-xs text-gray-600">
+                  <input type="checkbox" v-model="overwriteExisting" class="rounded border-gray-300" />
+                  同名时覆盖
+                </label>
+              </div>
             </div>
-          </div>
+          </transition>
         </div>
 
         <button class="text-sm text-indigo-600 hover:text-indigo-500" @click="createFolder">新建文件夹</button>
@@ -349,6 +362,43 @@ const handleGoToBreadcrumb = (index: number) => { clearSelection(); goToBreadcru
 /* 剪贴板文案 */
 const clipboardActionLabel = computed(() => !clipboard.value ? '' : (clipboard.value.mode === 'cut' ? '已剪贴' : '已复制'))
 const pasteBtnText = computed(() => pasting.value ? (clipboard.value?.mode === 'cut' ? '移动中...' : '复制中...') : '粘贴')
+
+
+// 上传菜单：延迟关闭
+const showUploadMenu = ref(false)
+const uploadMenuRef = ref<HTMLElement | null>(null)
+const HIDE_DELAY_MS = 250
+let uploadMenuCloseTimer: number | undefined
+
+const openUploadMenu = () => {
+  if (uploadMenuCloseTimer) {
+    clearTimeout(uploadMenuCloseTimer)
+    uploadMenuCloseTimer = undefined
+  }
+  showUploadMenu.value = true
+}
+const scheduleCloseUploadMenu = (delay = HIDE_DELAY_MS) => {
+  if (uploadMenuCloseTimer) clearTimeout(uploadMenuCloseTimer)
+  uploadMenuCloseTimer = window.setTimeout(() => {
+    showUploadMenu.value = false
+    uploadMenuCloseTimer = undefined
+  }, delay)
+}
+const toggleUploadMenu = () => {
+  if (showUploadMenu.value) scheduleCloseUploadMenu(0)
+  else openUploadMenu()
+}
+
+// 点击外部关闭
+onMounted(() => {
+  const onDocClick = (e: MouseEvent) => {
+    const el = uploadMenuRef.value
+    if (!el) return
+    if (!el.contains(e.target as Node)) showUploadMenu.value = false
+  }
+  document.addEventListener('click', onDocClick)
+  onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+})
 
 /* 顶部按钮：剪贴/复制 */
 const clipSelection = () => {
@@ -637,3 +687,16 @@ defineExpose({
   breadcrumbs
 })
 </script>
+
+
+<style scoped>
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>
