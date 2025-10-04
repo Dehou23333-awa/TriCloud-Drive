@@ -99,8 +99,6 @@ const usernameFocused = ref(false)
 const passwordFocused = ref(false)
 
 
-// … 其余你之前的 handleLogin、showNotification、setCookie 方法同样直接写在这里 …
-
 
 async function handleLogin() {
   if (!username.value) {
