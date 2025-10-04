@@ -95,7 +95,7 @@ const { login, isLoggedIn, register } = useAuth()
 // 2. 如果已经登录，直接跳转
 if (isLoggedIn.value) {
   // 注意：<script setup> 里要用 await 或者 .then
-  router.replace('/')
+  await router.replace('/')
 }
 
 // 3. 登录表单的响应式状态
@@ -111,7 +111,6 @@ const emailFocused = ref(false)
 const passwordFocused = ref(false)
 
 
-// … 其余你之前的 handleLogin、showNotification、setCookie 方法同样直接写在这里 …
 
 
 async function handleRegister() {

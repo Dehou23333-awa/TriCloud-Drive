@@ -132,6 +132,16 @@ await fetchUsers()
 </script>
 
 <template>
+  <AppNavbar>
+    <template #extra>
+      <NuxtLink
+        to="/"
+        class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+      >
+        返回首页
+      </NuxtLink>
+    </template>
+  </AppNavbar>
   <div class="p-6">
     <div class="flex items-center justify-between mb-4">
       <h1 class="text-xl font-semibold">文件管理（管理员）</h1>
