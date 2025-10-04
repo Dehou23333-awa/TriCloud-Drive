@@ -85,7 +85,7 @@ const { login, isLoggedIn } = useAuth()
 // 2. 如果已经登录，直接跳转
 if (isLoggedIn.value) {
   // 注意：<script setup> 里要用 await 或者 .then
-  router.replace('/')
+  await router.replace('/')
 }
 
 // 3. 登录表单的响应式状态

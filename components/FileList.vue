@@ -270,52 +270,19 @@
 </template>
 
 <script setup lang="ts">
-import { MoveService } from '~/services/move.service'
 import { formatToUTC8 } from '~/server/utils/time'
 import { useFileBrowser } from '~/composables/useFileBrowser'
 import { useDualSelection } from '~/composables/useDualSelection'
 import { useBulkActions } from '~/composables/useBulkActions'
 import { formatFileSize } from '~/utils/format'
-import { FilesService } from '~/services/files.service'
-import { FoldersService } from '~/services/folders.service'
-import { createZipSink } from '~/utils/zipper'
-import { CopyService } from '~/services/copy.service'
 import { useFileUpload } from '~/composables/useFileUpload'
 
-type ClipboardPayload = {
-  mode: 'cut' | 'copy'
-  folderIds: number[]
-  fileIds: number[]
-  fromFolderId: number | null
-}
-
-const clipboard = ref<ClipboardPayload | null>(null)
-const pasting = ref(false)
-const hasClipboard = computed(() => {
-  const c = clipboard.value
-  return !!c && (c.folderIds.length + c.fileIds.length) > 0
-})
-const clipboardCount = computed(() => {
-  const c = clipboard.value
-  return c ? (c.folderIds.length + c.fileIds.length) : 0
-})
-
-interface FolderRecord {
-  id: number
-  name: string
-  parentId: number | null
-  createdAt: string
-}
-interface FileRecord {
-  id: number
-  folderId: number | null
-  filename: string
-  fileKey: string
-  fileSize: number
-  fileUrl: string
-  contentType: string
-  createdAt: string
-}
+import type { FolderRecord, FileRecord } from '~/types/file-browser'
+import { useClipboard } from '~/composables/useClipboard'
+import { useUploadMenu } from '~/composables/useUploadMenu'
+import { useNameEditing } from '~/composables/useNameEditing'
+import { useFolderDownload } from '~/composables/useFolderDownload'
+import { useDnDUpload } from '~/composables/useDnDUpload'
 
 /* 列表/导航 */
 const {
@@ -333,23 +300,42 @@ const {
   clearSelection, reconcileSelection
 } = useDualSelection(folders, files)
 
-/* 批量操作&单项操作 */
+/* 批量操作&单项文件/文件夹操作（不含“打包下载文件夹”） */
 const {
-  bulkDeleting, bulkDownloading, downloadingFolderId,
+  bulkDeleting, bulkDownloading,
   downloadFile, deleteFile, deleteFolder,
   deleteSelected, downloadSelected
 } = useBulkActions(folders, files, selectedFolderIds, selectedFileIds)
 
-/* 上传相关 */
+/* 上传相关（进度、错误、具体上传函数） */
 const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileUpload()
-const isDragging = ref(false)
-const dragCounter = ref(0)
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const folderInputRef = ref<HTMLInputElement | null>(null)
-const overwriteExisting = ref(false)
 
-const onDragEnter = () => { dragCounter.value++; isDragging.value = true }
-const onDragLeave = () => { dragCounter.value = Math.max(0, dragCounter.value - 1); if (dragCounter.value === 0) isDragging.value = false }
+/* 上传悬浮菜单 */
+const { showUploadMenu, uploadMenuRef, openUploadMenu, scheduleCloseUploadMenu, toggleUploadMenu } = useUploadMenu()
+
+/* 剪贴板（剪贴/复制/粘贴） */
+const {
+  clipboard, pasting, hasClipboard, clipboardCount,
+  clipboardActionLabel, pasteBtnText,
+  clipSelection, copySelection, clipFolder, copyFolder, clipFile, copyFile, pasteClipboard
+} = useClipboard({
+  selectedFolderIds, selectedFileIds, selectedCount, currentFolderId, fetchFiles, clearSelection
+})
+
+/* 新建/重命名 */
+const { createFolder, renameFolder, renameFile } = useNameEditing(
+  folders, files, breadcrumbs, currentFolderId, fetchFiles
+)
+
+/* 文件夹打包下载 */
+const { downloadingFolderId, downloadFolder } = useFolderDownload()
+
+/* 拖拽/选择上传（含目录遍历/确保路径存在） */
+const {
+  isDragging, onDragEnter, onDragLeave,
+  fileInputRef, folderInputRef, overwriteExisting,
+  handleDrop, handleFileSelect, handleFolderSelect
+} = useDnDUpload(currentFolderId, uploadMultipleFiles, fetchFiles, clearSelection)
 
 /* 保持选择状态与列表同步 */
 watch([folders, files], () => reconcileSelection())
@@ -359,325 +345,7 @@ const handleNavigateToFolder = (folder: FolderRecord) => { clearSelection(); nav
 const handleGoUp = () => { clearSelection(); goUp() }
 const handleGoToBreadcrumb = (index: number) => { clearSelection(); goToBreadcrumb(index) }
 
-/* 剪贴板文案 */
-const clipboardActionLabel = computed(() => !clipboard.value ? '' : (clipboard.value.mode === 'cut' ? '已剪贴' : '已复制'))
-const pasteBtnText = computed(() => pasting.value ? (clipboard.value?.mode === 'cut' ? '移动中...' : '复制中...') : '粘贴')
-
-
-// 上传菜单：延迟关闭
-const showUploadMenu = ref(false)
-const uploadMenuRef = ref<HTMLElement | null>(null)
-const HIDE_DELAY_MS = 250
-let uploadMenuCloseTimer: number | undefined
-
-const openUploadMenu = () => {
-  if (uploadMenuCloseTimer) {
-    clearTimeout(uploadMenuCloseTimer)
-    uploadMenuCloseTimer = undefined
-  }
-  showUploadMenu.value = true
-}
-const scheduleCloseUploadMenu = (delay = HIDE_DELAY_MS) => {
-  if (uploadMenuCloseTimer) clearTimeout(uploadMenuCloseTimer)
-  uploadMenuCloseTimer = window.setTimeout(() => {
-    showUploadMenu.value = false
-    uploadMenuCloseTimer = undefined
-  }, delay)
-}
-const toggleUploadMenu = () => {
-  if (showUploadMenu.value) scheduleCloseUploadMenu(0)
-  else openUploadMenu()
-}
-
-// 点击外部关闭
-onMounted(() => {
-  const onDocClick = (e: MouseEvent) => {
-    const el = uploadMenuRef.value
-    if (!el) return
-    if (!el.contains(e.target as Node)) showUploadMenu.value = false
-  }
-  document.addEventListener('click', onDocClick)
-  onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
-})
-
-/* 顶部按钮：剪贴/复制 */
-const clipSelection = () => {
-  if (selectedCount.value === 0) return
-  clipboard.value = {
-    mode: 'cut',
-    folderIds: Array.from(selectedFolderIds.value),
-    fileIds: Array.from(selectedFileIds.value),
-    fromFolderId: currentFolderId.value ?? null
-  }
-}
-const copySelection = () => {
-  if (selectedCount.value === 0) return
-  clipboard.value = {
-    mode: 'copy',
-    folderIds: Array.from(selectedFolderIds.value),
-    fileIds: Array.from(selectedFileIds.value),
-    fromFolderId: currentFolderId.value ?? null
-  }
-}
-
-/* 单项剪贴/复制 */
-const clipFolder = (folder: FolderRecord) => {
-  clipboard.value = { mode: 'cut', folderIds: [folder.id], fileIds: [], fromFolderId: currentFolderId.value ?? null }
-}
-const copyFolder = (folder: FolderRecord) => {
-  clipboard.value = { mode: 'copy', folderIds: [folder.id], fileIds: [], fromFolderId: currentFolderId.value ?? null }
-}
-const clipFile = (file: FileRecord) => {
-  clipboard.value = { mode: 'cut', folderIds: [], fileIds: [file.id], fromFolderId: currentFolderId.value ?? null }
-}
-const copyFile = (file: FileRecord) => {
-  clipboard.value = { mode: 'copy', folderIds: [], fileIds: [file.id], fromFolderId: currentFolderId.value ?? null }
-}
-
-/* 粘贴 */
-const pasteClipboard = async () => {
-  if (!hasClipboard.value || pasting.value) return
-  pasting.value = true
-  try {
-    const targetFolderId = currentFolderId.value ?? null
-    const c = clipboard.value!
-    const res = c.mode === 'cut'
-      ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds)
-      : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds)
-
-    if (!res?.success) {
-      alert(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'))
-      return
-    }
-    clipboard.value = null
-    clearSelection()
-    await fetchFiles()
-  } catch (e: any) {
-    alert(e?.message || '粘贴失败，请稍后重试')
-  } finally {
-    pasting.value = false
-  }
-}
-
-/* 创建/重命名 */
-const createFolder = async () => {
-  const name = prompt('请输入新建文件夹名称：')?.trim()
-  if (!name) return
-  if (name.length > 255) return alert('文件夹名称过长（最多255字符）')
-  const res = await FoldersService.create(name, currentFolderId.value ?? null)
-  if (res.success) await fetchFiles()
-  else alert(res.message || '创建失败')
-}
-const keepExtIfNone = (oldName: string, entered: string) => {
-  const trim = (entered || '').trim()
-  if (!trim) return trim
-  const hasExt = /\.[^./\\]+$/.test(trim)  // 修正正则
-  if (hasExt) return trim
-  const oldExt = oldName.match(/\.[^./\\]+$/)?.[0] || ''  // 修正正则
-  return trim + oldExt
-}
-const validateName = (name: string, isFolder = false) => {
-  if (!name || !name.trim()) return '名称不能为空'
-  if (name.length > 255) return '名称过长（最多255字符）'
-  if (/[\\/]/.test(name)) return '名称不可包含斜杠/反斜杠'
-  if (isFolder && (name === '.' || name === '..')) return '非法的文件夹名称'
-  return ''
-}
-const renameFolder = async (folder: FolderRecord) => {
-  const entered = prompt('请输入新的文件夹名称：', folder.name)
-  if (entered == null) return
-  const newName = entered.trim()
-  const err = validateName(newName, true)
-  if (err) return alert(err)
-  if (newName === folder.name) return
-  const res = await FoldersService.rename(folder.id, newName)
-  if (!res.success) return alert(res.message || '重命名失败')
-  const idx = folders.value.findIndex(f => f.id === folder.id)
-  if (idx >= 0) folders.value[idx].name = newName
-  breadcrumbs.value = breadcrumbs.value.map(c => c.id === folder.id ? { ...c, name: newName } : c)
-}
-const renameFile = async (file: FileRecord) => {
-  const entered = prompt('请输入新的文件名：', file.filename)
-  if (entered == null) return
-  const finalName = keepExtIfNone(file.filename, entered)
-  const err = validateName(finalName)
-  if (err) return alert(err)
-  if (finalName === file.filename) return
-  const res = await FilesService.rename(file.id, finalName)
-  if (!res.success) return alert(res.message || '重命名失败')
-  const idx = files.value.findIndex(f => f.id === file.id)
-  if (idx >= 0) files.value[idx].filename = finalName
-}
-
-/* 下载文件夹 */
-const downloadFolder = async (folder: FolderRecord) => {
-  if (downloadingFolderId.value) return
-  downloadingFolderId.value = folder.id
-  try {
-    const manifest = await FoldersService.manifest(folder.id)
-    if (!manifest?.success) throw new Error('无法获取清单')
-    if (!manifest.files?.length) {
-      alert('该文件夹为空')
-      return
-    }
-    const go = confirm(`将打包下载 "${folder.name}"（${manifest.totals.count} 个文件，共约 ${formatFileSize(manifest.totals.bytes)}）。继续？`)
-    if (!go) return
-    const sink = await createZipSink(`${folder.name}.zip`)
-    for (const item of manifest.files) {
-      const sign = await FilesService.downloadSign({ fileKey: item.fileKey, filename: item.filename })
-      if (!sign?.success) throw new Error(`签名失败: ${item.filename}`)
-      const entryPath = [folder.name, item.relDir, item.filename].filter(Boolean).join('/')
-      await sink.addFromUrl(entryPath, sign.data.downloadUrl)
-    }
-    await sink.close()
-    alert('打包完成，已保存。')
-  } catch (e: any) {
-    console.error('文件夹下载失败:', e)
-    alert(e?.message || '文件夹下载失败，请稍后重试')
-  } finally {
-    downloadingFolderId.value = null
-  }
-}
-
-/* 拖拽/选择上传 */
-const toPosix = (p: string) => p.replace(/\\/g, '/')
-const normalizeDir = (p: string) => toPosix(p).replace(/^\/+|\/+$/g, '')
-
-const handleDrop = async (event: DragEvent) => {
-  dragCounter.value = 0
-  isDragging.value = false
-  const items = Array.from(event.dataTransfer?.items || [])
-  // 检测是否包含目录
-  if (items.some((it: any) => typeof it.webkitGetAsEntry === 'function' && it.webkitGetAsEntry()?.isDirectory)) {
-    const entries = await getFilesFromDataTransferItems(items as any)
-    if (entries.length) {
-      await handleEntries(entries)
-      return
-    }
-  }
-  const fls = Array.from(event.dataTransfer?.files || [])
-  if (fls.length > 0) await handleFiles(fls)
-}
-const handleFileSelect = async (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const fls = Array.from(target.files || [])
-  if (!fls.length) return
-  await handleFiles(fls)
-  if (fileInputRef.value) fileInputRef.value.value = ''
-}
-const handleFolderSelect = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const fls = Array.from(input.files || [])
-  if (!fls.length) return
-  const entries = fls.map((f) => {
-    const rpRaw = (f as any).webkitRelativePath || f.name
-    const rp = toPosix(rpRaw)
-    const dir = rp.includes('/') ? rp.slice(0, rp.lastIndexOf('/')) : ''
-    return { file: f, relativePath: normalizeDir(dir) }
-  })
-  await handleEntries(entries)
-  if (folderInputRef.value) folderInputRef.value.value = ''
-}
-const handleFiles = async (fls: File[]) => {
-  try {
-    await uploadMultipleFiles(fls, {
-      folderId: currentFolderId.value ?? null,
-      overwrite: overwriteExisting.value
-    })
-    clearSelection()
-    await fetchFiles()
-  } catch (error) {
-    console.error('文件上传失败:', error)
-  }
-}
-const handleEntries = async (entries: { file: File; relativePath: string }[]) => {
-  const uniqueDirs = Array.from(new Set(entries.map(e => e.relativePath).filter(Boolean)))
-  const baseParentId = currentFolderId.value ?? null
-  const dirMap = await ensurePaths(uniqueDirs, baseParentId)
-
-  // 分组：同一目录一组
-  const groups = new Map<string, File[]>()
-  for (const { file, relativePath } of entries) {
-    const key = relativePath || '__ROOT__'
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(file)
-  }
-
-  for (const [dir, fls] of groups) {
-    const folderId = dir === '__ROOT__' ? baseParentId : (dirMap[dir] ?? baseParentId)
-    try {
-      await uploadMultipleFiles(fls, {
-        folderId,
-        overwrite: overwriteExisting.value
-      })
-    } catch (e) {
-      console.error('文件夹内文件上传失败:', e)
-    }
-  }
-
-  clearSelection()
-  await fetchFiles()
-}
-
-const ensurePaths = async (paths: string[], parentId: number | null) => {
-  if (!paths.length) return {} as Record<string, number | null>
-  try {
-    const res = await $fetch<{ success: boolean; map: Record<string, number> }>('/api/folders/ensure-paths', {
-      method: 'POST',
-      body: { parentId, paths }
-    })
-    return res?.map || {}
-  } catch (e) {
-    console.error('确保目录存在失败:', e)
-    return {}
-  }
-}
-// 目录遍历辅助
-const readAllDirectoryEntries = (reader: any): Promise<any[]> => {
-  return new Promise((resolve) => {
-    const entries: any[] = []
-    const readBatch = () => {
-      reader.readEntries((batch: any[]) => {
-        if (batch.length === 0) resolve(entries)
-        else { entries.push(...batch); readBatch() }
-      }, () => resolve(entries))
-    }
-    readBatch()
-  })
-}
-const traverseDirectoryEntry = async (dirEntry: any, path: string): Promise<{ file: File; relativePath: string }[]> => {
-  const reader = dirEntry.createReader()
-  const children = await readAllDirectoryEntries(reader)
-  const result: { file: File; relativePath: string }[] = []
-  for (const entry of children) {
-    if (entry.isFile) {
-      const file: File = await new Promise((res) => entry.file(res))
-      result.push({ file, relativePath: normalizeDir(path) })
-    } else if (entry.isDirectory) {
-      const subPath = path ? `${path}/${entry.name}` : entry.name
-      const subFiles = await traverseDirectoryEntry(entry, subPath)
-      result.push(...subFiles)
-    }
-  }
-  return result
-}
-const getFilesFromDataTransferItems = async (items: DataTransferItem[]) => {
-  const results: { file: File; relativePath: string }[] = []
-  for (const item of items) {
-    const entry = (item as any).webkitGetAsEntry?.()
-    if (!entry) continue
-    if (entry.isFile) {
-      const file: File = await new Promise((res) => entry.file(res))
-      results.push({ file, relativePath: '' })
-    } else if (entry.isDirectory) {
-      const files = await traverseDirectoryEntry(entry, entry.name)
-      results.push(...files)
-    }
-  }
-  return results.map(r => ({ file: r.file, relativePath: normalizeDir(r.relativePath) }))
-}
-
-/* 向父组件暴露 */
+/* 向父组件暴露/事件 */
 const emit = defineEmits<{ 'folder-change': [number | null] }>()
 watch(currentFolderId, (id) => emit('folder-change', id), { immediate: true })
 
@@ -687,16 +355,3 @@ defineExpose({
   breadcrumbs
 })
 </script>
-
-
-<style scoped>
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-</style>
