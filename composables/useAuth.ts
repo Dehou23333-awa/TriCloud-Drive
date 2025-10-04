@@ -39,23 +39,6 @@ export const useAuth = () => {
       user.value = null
     }
   }
-  /*
-  const isAdminOrSuperAdmin =  async () => {
-    try {
-      const headers = process.server ? useRequestHeaders(['cookie']) : undefined
-      const data = await $fetch<{ success: boolean; user: User | null }>('/api/auth/isAdminOrSuperAdmin', {
-        headers,
-        credentials: 'include'
-      })
-      if(data.success && data.user){
-        return data.user.IsAdmin || data.user.IsSuperAdmin
-        
-      }
-      return false
-    } catch {
-      return false
-    }
-  }*/
 
   return {
     user: readonly(user),

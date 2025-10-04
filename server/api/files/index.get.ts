@@ -1,22 +1,35 @@
-import { requireAuth } from '~/server/utils/auth-middleware'
+// server/api/files/index.get.ts
+import { requireAuth, requireAdmin } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { getQuery } from 'h3'
 
 export default defineEventHandler(async (event) => {
   try {
-    // 认证
-    const user = await requireAuth(event)
-
-    // 数据库连接
+    const me = await requireAuth(event) // 默认只拿 userId
     const db = getDb(event)
-    if (!db) {
-      throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
+    if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
+
+    const { folderId: rawFolderId, targetUserId: rawTargetUserId } = getQuery(event) as {
+      folderId?: string
+      targetUserId?: string
     }
 
-    // 解析 folderId（root/0/空 => 根层）
-    const { folderId: rawFolderId } = getQuery(event) as { folderId?: string }
-    let folderId: number | null = null
+    // 计算生效的 userId
+    let effectiveUserId = me.userId
+    if (rawTargetUserId) {
+      const targetId = Number(rawTargetUserId)
+      if (!Number.isInteger(targetId) || targetId < 1) {
+        throw createError({ statusCode: 400, statusMessage: '非法的 targetUserId' })
+      }
+      if (targetId !== me.userId) {
+        // 仅管理员可查看他人数据
+        await requireAdmin(event)
+      }
+      effectiveUserId = targetId
+    }
 
+    // 解析 folderId
+    let folderId: number | null = null
     if (rawFolderId && rawFolderId !== 'root' && rawFolderId !== '0') {
       const parsed = Number(rawFolderId)
       if (!Number.isInteger(parsed) || parsed < 1) {
@@ -24,10 +37,10 @@ export default defineEventHandler(async (event) => {
       }
       folderId = parsed
 
-      // 校验当前目录是否属于用户
+      // 校验目录归属
       const check = await db
         .prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
-        .bind(folderId, user.userId)
+        .bind(folderId, effectiveUserId)
         .all()
       if (!check.results || check.results.length === 0) {
         throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
@@ -43,7 +56,7 @@ export default defineEventHandler(async (event) => {
             WHERE user_id = ? AND parent_id IS NULL
             ORDER BY name COLLATE NOCASE ASC
           `)
-          .bind(user.userId)
+          .bind(effectiveUserId)
           .all()
       : await db
           .prepare(`
@@ -52,10 +65,10 @@ export default defineEventHandler(async (event) => {
             WHERE user_id = ? AND parent_id = ?
             ORDER BY name COLLATE NOCASE ASC
           `)
-          .bind(user.userId, folderId)
+          .bind(effectiveUserId, folderId)
           .all()
 
-    // 查询当前目录内的文件
+    // 查询文件
     const filesRes = folderId === null
       ? await db
           .prepare(`
@@ -68,7 +81,7 @@ export default defineEventHandler(async (event) => {
             WHERE user_id = ? AND folder_id IS NULL
             ORDER BY created_at DESC
           `)
-          .bind(user.userId)
+          .bind(effectiveUserId)
           .all()
       : await db
           .prepare(`
@@ -81,14 +94,14 @@ export default defineEventHandler(async (event) => {
             WHERE user_id = ? AND folder_id = ?
             ORDER BY created_at DESC
           `)
-          .bind(user.userId, folderId)
+          .bind(effectiveUserId, folderId)
           .all()
 
     return {
       success: true,
-      currentFolderId: folderId,          // null 表示根层
-      folders: foldersRes.results || [],  // 当前目录下的子文件夹
-      files: filesRes.results || []       // 当前目录下的文件
+      currentFolderId: folderId,
+      folders: foldersRes.results || [],
+      files: filesRes.results || []
     }
   } catch (error: any) {
     console.error('Get items error:', error)
