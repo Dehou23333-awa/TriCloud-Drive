@@ -11,6 +11,7 @@ export interface User {
   usedDownload: number
   maxDownload: number
   expire_at: string
+  canChangePassword: boolean
 }
 
 export interface Database {

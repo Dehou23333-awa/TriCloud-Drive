@@ -40,7 +40,8 @@ export default defineEventHandler(async (event) => {
         maxStorage: user.maxStorage,
         usedDownload: user.usedDownload,
         maxDownload: user.maxDownload,
-        expire_at: user.expire_at
+        expire_at: user.expire_at,
+        canChangePassword: user.canChangePassword,
       }
     }
   } catch (error: any) {

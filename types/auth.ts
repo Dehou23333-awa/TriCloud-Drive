@@ -1,6 +1,7 @@
 export interface User {
   id: number
   email: string
+  username: string
   created_at: string
   IsAdmin: boolean
   IsSuperAdmin: boolean
@@ -9,6 +10,7 @@ export interface User {
   usedDownload: number
   maxDownload: number
   expire_at: string | null
+  canChangePassword: boolean
 }
 
 export interface AuthResponse {

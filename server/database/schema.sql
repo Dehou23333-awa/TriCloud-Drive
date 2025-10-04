@@ -38,7 +38,8 @@ CREATE TABLE users (
   maxStorage    BIGINT DEFAULT 1,
   usedDownload  BIGINT DEFAULT 0,
   maxDownload   BIGINT DEFAULT 1,
-  expire_at     TEXT DEFAULT CURRENT_TIMESTAMP
+  expire_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+  canChangePassword BOOLEAN DEFAULT 1
 );
 
 -- -------- folders (tree) --------
