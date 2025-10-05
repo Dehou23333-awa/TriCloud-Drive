@@ -99,3 +99,18 @@ export async function optionalAuth(event: any): Promise<AuthenticatedUser | null
     return null
   }
 }
+
+export async function getMeAndTarget(event: any): Promise<{ me: AuthenticatedUser, targetUserId: number }> {
+  const me = await requireAuth(event, { withUser: true })
+  const isGet = getMethod(event) === 'GET'
+  const q: any = isGet ? getQuery(event) : null
+  const b: any = isGet ? null : await readBody(event)
+  const provided = q?.targetUserId ?? b?.targetUserId
+  const targetUserId = provided != null ? Number(provided) : me.userId
+
+  // 只需校验是否管理员：当操作他人资源时需要管理员
+  if (targetUserId !== me.userId && !(me.isAdmin || me.isSuperAdmin)) {
+    throw createError({ statusCode: 403, statusMessage: '仅管理员可操作他人文件' })
+  }
+  return { me, targetUserId }
+}

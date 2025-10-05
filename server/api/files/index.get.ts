@@ -1,11 +1,12 @@
 // server/api/files/index.get.ts
-import { requireAuth, requireAdmin } from '~/server/utils/auth-middleware'
+import { requireAuth, requireAdmin, getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { getQuery } from 'h3'
+import { effect } from 'vue'
 
 export default defineEventHandler(async (event) => {
   try {
-    const me = await requireAuth(event) // 默认只拿 userId
+    //const me = await requireAuth(event) // 默认只拿 userId
     const db = getDb(event)
     if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
 
@@ -13,20 +14,9 @@ export default defineEventHandler(async (event) => {
       folderId?: string
       targetUserId?: string
     }
+    const { targetUserId } = await getMeAndTarget(event)
 
-    // 计算生效的 userId
-    let effectiveUserId = me.userId
-    if (rawTargetUserId) {
-      const targetId = Number(rawTargetUserId)
-      if (!Number.isInteger(targetId) || targetId < 1) {
-        throw createError({ statusCode: 400, statusMessage: '非法的 targetUserId' })
-      }
-      if (targetId !== me.userId) {
-        // 仅管理员可查看他人数据
-        await requireAdmin(event)
-      }
-      effectiveUserId = targetId
-    }
+    let effectiveUserId = targetUserId
 
     // 解析 folderId
     let folderId: number | null = null
