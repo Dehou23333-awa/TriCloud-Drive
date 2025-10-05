@@ -1,3 +1,4 @@
+import { ref, readonly, type Ref } from 'vue'
 import COS from 'cos-js-sdk-v5'
 
 interface UploadCredentials {
@@ -26,14 +27,10 @@ interface UploadProgress {
   percent: number
 }
 
-type UploadOptions = {
-  folderId?: number | null
-  overwrite?: boolean
-  partOfBatch?: boolean
-  onProgressDelta?: (delta: number) => void
-}
+type UploadOptions = { folderId?: number | null; overwrite?: boolean; partOfBatch?: boolean; onProgressDelta?: (delta: number) => void }
 
-export const useFileUpload = () => {
+export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) => {
+  const tRef = options?.targetUserId
   const uploading = ref(false)
   const uploadProgress = ref<UploadProgress>({ loaded: 0, total: 0, percent: 0 })
   const uploadError = ref('')
@@ -49,37 +46,30 @@ export const useFileUpload = () => {
     folderId?: number | null
     overwrite?: boolean
   }): Promise<UploadConfig> => {
+    const body: any = {
+      filename: params.filename,
+      fileSize: params.fileSize,
+      folderId: params.folderId ?? null,
+      overwrite: !!params.overwrite
+    }
+    if (tRef?.value) body.targetUserId = tRef.value
     const response = await $fetch<{ success: boolean; data: UploadConfig }>('/api/upload/credentials', {
       method: 'POST',
-      body: {
-        filename: params.filename,
-        fileSize: params.fileSize,
-        folderId: params.folderId ?? null,
-        overwrite: !!params.overwrite
-      }
+      body
     })
     if (!response.success) throw new Error('获取上传凭证失败')
     return response.data
   }
 
-  const uploadFile = async (file: File, options?: UploadOptions): Promise<string> => {
-    const partOfBatch = !!options?.partOfBatch
-    const folderId = options?.folderId ?? null
-    const overwrite = !!options?.overwrite
+  const uploadFile = async (file: File, options2?: UploadOptions): Promise<string> => {
+    const partOfBatch = !!options2?.partOfBatch
+    const folderId = options2?.folderId ?? null
+    const overwrite = !!options2?.overwrite
 
     try {
-      if (!partOfBatch) {
-        uploading.value = true
-        uploadError.value = ''
-        setProgress(0, file.size)
-      }
+      if (!partOfBatch) { uploading.value = true; uploadError.value = ''; setProgress(0, file.size) }
 
-      const config = await getUploadCredentials({
-        filename: file.name,
-        fileSize: file.size,
-        folderId,
-        overwrite
-      })
+      const config = await getUploadCredentials({ filename: file.name, fileSize: file.size, folderId, overwrite })
 
       if (config.demoMode) {
         let lastLoaded = 0
@@ -87,24 +77,23 @@ export const useFileUpload = () => {
           const loaded = Math.round((file.size * i) / 100)
           const delta = Math.max(0, loaded - lastLoaded)
           lastLoaded = loaded
-          options?.onProgressDelta?.(delta)
+          options2?.onProgressDelta?.(delta)
           if (!partOfBatch) setProgress(loaded, file.size)
           await new Promise(r => setTimeout(r, 100))
         }
         const fileUrl = `${config.uploadUrl}/${config.fileKey}`
-        await $fetch('/api/files/save', {
-          method: 'POST',
-          body: {
-            filename: file.name,
-            safeFilename: config.safeFilename,
-            fileKey: config.fileKey,
-            fileSize: file.size,
-            fileUrl: fileUrl,
-            contentType: file.type,
-            folderId,
-            overwrite
-          }
-        })
+        const body: any = {
+          filename: file.name,
+          safeFilename: config.safeFilename,
+          fileKey: config.fileKey,
+          fileSize: file.size,
+          fileUrl,
+          contentType: file.type,
+          folderId,
+          overwrite
+        }
+        if (tRef?.value) body.targetUserId = tRef.value
+        await $fetch('/api/files/save', { method: 'POST', body })
         return fileUrl
       }
 
@@ -126,7 +115,7 @@ export const useFileUpload = () => {
             const total = progressData?.total ?? file.size
             const delta = Math.max(0, loaded - lastLoaded)
             lastLoaded = loaded
-            options?.onProgressDelta?.(delta)
+            options2?.onProgressDelta?.(delta)
             if (!partOfBatch) setProgress(loaded, total)
           }
         }, (err: any) => {
@@ -140,19 +129,20 @@ export const useFileUpload = () => {
         })
       })
 
-      await $fetch('/api/files/save', {
-        method: 'POST',
-        body: {
+      {
+        const body: any = {
           filename: file.name,
           safeFilename: config.safeFilename,
           fileKey: config.fileKey,
           fileSize: file.size,
-          fileUrl: fileUrl,
+          fileUrl,
           contentType: file.type,
           folderId,
           overwrite
         }
-      })
+        if (tRef?.value) body.targetUserId = tRef.value
+        await $fetch('/api/files/save', { method: 'POST', body })
+      }
 
       return fileUrl
     } catch (error: any) {
@@ -163,10 +153,10 @@ export const useFileUpload = () => {
     }
   }
 
-  const uploadMultipleFiles = async (files: File[], options?: { folderId?: number | null; overwrite?: boolean }): Promise<string[]> => {
+  const uploadMultipleFiles = async (files: File[], options3?: { folderId?: number | null; overwrite?: boolean }): Promise<string[]> => {
     const results: string[] = []
-    const folderId = options?.folderId ?? null
-    const overwrite = !!options?.overwrite
+    const folderId = options3?.folderId ?? null
+    const overwrite = !!options3?.overwrite
 
     const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
     let aggregatedLoaded = 0

@@ -1,11 +1,12 @@
-// ~/services/move.service.ts
 import { $fetch } from 'ofetch'
 
 export const MoveService = {
-  async paste(targetFolderId: number | null, folderIds: number[], fileIds: number[]) {
+  async paste(targetFolderId: number | null, folderIds: number[], fileIds: number[], targetUserId?: number | null) {
+    const body: any = { targetFolderId, folderIds, fileIds }
+    if (targetUserId) body.targetUserId = targetUserId
     return $fetch('/api/files/move', {
       method: 'POST',
-      body: { targetFolderId, folderIds, fileIds }
+      body
     }) as Promise<{
       success: boolean
       message?: string

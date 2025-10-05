@@ -4,26 +4,29 @@ import { triggerDownload } from '~/utils/download'
 import { createZipSink } from '~/utils/zipper'
 import { formatFileSize } from '~/utils/format'
 import type { FolderRecord, FileRecord } from '~/types/files'
+import { ref, type Ref } from 'vue'
 
 export function useBulkActions(
   folders: Ref<FolderRecord[]>,
   files: Ref<FileRecord[]>,
   selectedFolderIds: Ref<Set<number>>,
-  selectedFileIds: Ref<Set<number>>
+  selectedFileIds: Ref<Set<number>>,
+  options?: { targetUserId?: Ref<number | null> }
 ) {
+  const tRef = options?.targetUserId
   const bulkDeleting = ref(false)
   const bulkDownloading = ref(false)
   const downloadingFolderId = ref<number | null>(null)
 
   const downloadFile = async (file: FileRecord) => {
-    const res = await FilesService.downloadSign({ fileKey: file.fileKey, filename: file.filename })
+    const res = await FilesService.downloadSign({ fileKey: file.fileKey, filename: file.filename }, tRef?.value ?? null)
     if (res.success) triggerDownload(res.data.downloadUrl, res.data.filename)
   }
 
   const deleteFile = async (file: FileRecord) => {
     const ok = confirm(`确定要删除文件 "${file.filename}" 吗？`)
     if (!ok) return
-    const res = await FilesService.delete(file.id)
+    const res = await FilesService.delete(file.id, tRef?.value ?? null)
     if (res.success) {
       files.value = files.value.filter(f => f.id !== file.id)
       selectedFileIds.value.delete(file.id)
@@ -36,7 +39,7 @@ export function useBulkActions(
   const deleteFolder = async (folder: FolderRecord) => {
     const ok = confirm(`确定要删除文件夹 "${folder.name}" 吗？\n将同时删除其所有子文件夹与文件，操作不可恢复。`)
     if (!ok) return
-    const res = await FoldersService.delete(folder.id)
+    const res = await FoldersService.delete(folder.id, tRef?.value ?? null)
     if (res.success) {
       folders.value = folders.value.filter(f => f.id !== folder.id)
       selectedFolderIds.value.delete(folder.id)
@@ -59,13 +62,14 @@ export function useBulkActions(
 
     bulkDeleting.value = true
     try {
+      const t = tRef?.value ?? null
       const tasks = [
-        ...fileIds.map(id => FilesService.delete(id).then(r => ({ ok: r.success, id, type: 'file', message: r.message })).catch(e => ({ ok: false, id, type: 'file', message: e?.data?.message || e?.message }))),
-        ...folderIds.map(id => FoldersService.delete(id).then(r => ({ ok: r.success, id, type: 'folder', message: r.message })).catch(e => ({ ok: false, id, type: 'folder', message: e?.data?.message || e?.message })))
+        ...fileIds.map(id => FilesService.delete(id, t).then(r => ({ ok: r.success, id, type: 'file', message: r.message })).catch(e => ({ ok: false, id, type: 'file', message: e?.data?.message || e?.message }))),
+        ...folderIds.map(id => FoldersService.delete(id, t).then(r => ({ ok: r.success, id, type: 'folder', message: r.message })).catch(e => ({ ok: false, id, type: 'folder', message: e?.data?.message || e?.message })))
       ]
       const results = await Promise.all(tasks)
-      const okFiles = results.filter(r => r.ok && r.type === 'file').map(r => r.id)
-      const okFolders = results.filter(r => r.ok && r.type === 'folder').map(r => r.id)
+      const okFiles = results.filter(r => r.ok && r.type === 'file').map(r => r.id as number)
+      const okFolders = results.filter(r => r.ok && r.type === 'folder').map(r => r.id as number)
 
       if (okFiles.length) files.value = files.value.filter(f => !okFiles.includes(f.id))
       if (okFolders.length) folders.value = folders.value.filter(f => !okFolders.includes(f.id))
@@ -104,7 +108,8 @@ export function useBulkActions(
     // 含文件夹：打包
     bulkDownloading.value = true
     try {
-      const manifests = await Promise.all(selFolders.map(f => FoldersService.manifest(f.id)))
+      const t = tRef?.value ?? null
+      const manifests = await Promise.all(selFolders.map(f => FoldersService.manifest(f.id, t)))
       const totalFolderBytes = manifests.reduce((acc, m) => acc + (m.totals?.bytes || 0), 0)
       const totalFileBytes = selFiles.reduce((acc, f) => acc + (f.fileSize || 0), 0)
       const totalBytes = totalFolderBytes + totalFileBytes
@@ -121,7 +126,7 @@ export function useBulkActions(
       // 文件夹条目（保持原有相对路径）
       for (const m of manifests) {
         for (const item of m.files) {
-          const sign = await FilesService.downloadSign({ fileKey: item.fileKey, filename: item.filename })
+          const sign = await FilesService.downloadSign({ fileKey: item.fileKey, filename: item.filename }, t)
           if (!sign.success) throw new Error(`签名失败: ${item.filename}`)
           const entryPath = [m.folder.name, item.relDir, item.filename].filter(Boolean).join('/')
           await sink.addFromUrl(entryPath, sign.data.downloadUrl)
@@ -130,7 +135,7 @@ export function useBulkActions(
 
       // 选中的散文件放在 zip 根目录
       for (const f of selFiles) {
-        const sign = await FilesService.downloadSign({ fileKey: f.fileKey, filename: f.filename })
+        const sign = await FilesService.downloadSign({ fileKey: f.fileKey, filename: f.filename }, t)
         if (!sign.success) throw new Error(`签名失败: ${f.filename}`)
         await sink.addFromUrl(f.filename, sign.data.downloadUrl)
       }

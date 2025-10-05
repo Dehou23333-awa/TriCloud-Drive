@@ -5,9 +5,7 @@
     @dragenter.prevent="onDragEnter"
     @dragleave.prevent="onDragLeave"
     @drop.prevent="handleDrop"
-    :class="{
-      'border-2 border-dashed border-indigo-400 bg-indigo-50': isDragging
-    }"
+    :class="{ 'border-2 border-dashed border-indigo-400 bg-indigo-50': isDragging }"
   >
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
@@ -20,7 +18,7 @@
           @change="toggleSelectAll"
           title="全选/全不选"
         />
-        <h3 class="text-lg font-medium text-gray-900">我的文件</h3>
+        <h3 class="text-lg font-medium text-gray-900">{{ title || '我的文件' }}</h3>
         <nav class="text-sm text-gray-500">
           <span v-for="(crumb, idx) in breadcrumbs" :key="String(crumb.id) + '-' + idx">
             <span v-if="idx > 0" class="mx-1">/</span>
@@ -84,19 +82,10 @@
         </span>
 
         <!-- 上传按钮（悬浮菜单） -->
-        <div
-          class="relative"
-          ref="uploadMenuRef"
-          @mouseenter="openUploadMenu"
-          @mouseleave="scheduleCloseUploadMenu"
-        >
-          <button
-            class="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-            @click.stop="toggleUploadMenu"
-          >
+        <div class="relative" ref="uploadMenuRef" @mouseenter="openUploadMenu" @mouseleave="scheduleCloseUploadMenu">
+          <button class="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700" @click.stop="toggleUploadMenu">
             上传
           </button>
-
           <transition name="fade-slide">
             <div
               v-show="showUploadMenu"
@@ -104,16 +93,10 @@
               @mouseenter="openUploadMenu"
               @mouseleave="scheduleCloseUploadMenu"
             >
-              <button
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                @click="fileInputRef?.click()"
-              >
+              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" @click="fileInputRef?.click()">
                 上传文件
               </button>
-              <button
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                @click="folderInputRef?.click()"
-              >
+              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" @click="folderInputRef?.click()">
                 上传文件夹
               </button>
               <div class="px-4 py-2 border-t border-gray-100">
@@ -152,9 +135,8 @@
     <!-- 加载状态 -->
     <div v-if="loading" class="text-center py-8">
       <div class="inline-flex items-center">
-        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none"
-          viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
           <path class="opacity-75" fill="currentColor"
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
           </path>
@@ -166,8 +148,11 @@
     <!-- 列表 -->
     <div v-else-if="hasItems" class="space-y-3">
       <!-- 文件夹 -->
-      <div v-for="folder in folders" :key="'folder-' + folder.id"
-        class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+      <div
+        v-for="folder in folders"
+        :key="'folder-' + folder.id"
+        class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+      >
         <div class="flex items-center space-x-3">
           <input
             type="checkbox"
@@ -218,8 +203,11 @@
       </div>
 
       <!-- 文件 -->
-      <div v-for="file in files" :key="'file-' + file.id"
-        class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+      <div
+        v-for="file in files"
+        :key="'file-' + file.id"
+        class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+      >
         <div class="flex items-center space-x-3">
           <input
             type="checkbox"
@@ -270,13 +258,13 @@
 </template>
 
 <script setup lang="ts">
+import { toRef, watch } from 'vue'
 import { formatToUTC8 } from '~/server/utils/time'
 import { useFileBrowser } from '~/composables/useFileBrowser'
 import { useDualSelection } from '~/composables/useDualSelection'
 import { useBulkActions } from '~/composables/useBulkActions'
 import { formatFileSize } from '~/utils/format'
 import { useFileUpload } from '~/composables/useFileUpload'
-
 import type { FolderRecord, FileRecord } from '~/types/file-browser'
 import { useClipboard } from '~/composables/useClipboard'
 import { useUploadMenu } from '~/composables/useUploadMenu'
@@ -284,12 +272,18 @@ import { useNameEditing } from '~/composables/useNameEditing'
 import { useFolderDownload } from '~/composables/useFolderDownload'
 import { useDnDUpload } from '~/composables/useDnDUpload'
 
+const props = defineProps<{
+  targetUserId?: number | null
+  title?: string
+}>()
+const targetUserIdRef = toRef(props, 'targetUserId')
+
 /* 列表/导航 */
 const {
   folders, files, loading, hasItems,
   currentFolderId, breadcrumbs,
   fetchFiles, navigateToFolder, goUp, goToBreadcrumb
-} = useFileBrowser()
+} = useFileBrowser({ targetUserId: targetUserIdRef })
 
 /* 选择/全选 */
 const {
@@ -300,15 +294,15 @@ const {
   clearSelection, reconcileSelection
 } = useDualSelection(folders, files)
 
-/* 批量操作&单项文件/文件夹操作（不含“打包下载文件夹”） */
+/* 批量操作&单项文件/文件夹操作 */
 const {
-  bulkDeleting, bulkDownloading,
+  bulkDeleting, bulkDownloading, downloadingFolderId,
   downloadFile, deleteFile, deleteFolder,
   deleteSelected, downloadSelected
-} = useBulkActions(folders, files, selectedFolderIds, selectedFileIds)
+} = useBulkActions(folders, files, selectedFolderIds, selectedFileIds, { targetUserId: targetUserIdRef })
 
-/* 上传相关（进度、错误、具体上传函数） */
-const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileUpload()
+/* 上传相关 */
+const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileUpload({ targetUserId: targetUserIdRef })
 
 /* 上传悬浮菜单 */
 const { showUploadMenu, uploadMenuRef, openUploadMenu, scheduleCloseUploadMenu, toggleUploadMenu } = useUploadMenu()
@@ -318,24 +312,26 @@ const {
   clipboard, pasting, hasClipboard, clipboardCount,
   clipboardActionLabel, pasteBtnText,
   clipSelection, copySelection, clipFolder, copyFolder, clipFile, copyFile, pasteClipboard
-} = useClipboard({
-  selectedFolderIds, selectedFileIds, selectedCount, currentFolderId, fetchFiles, clearSelection
-})
+} = useClipboard(
+  { selectedFolderIds, selectedFileIds, selectedCount, currentFolderId, fetchFiles, clearSelection },
+  { targetUserId: targetUserIdRef }
+)
 
 /* 新建/重命名 */
 const { createFolder, renameFolder, renameFile } = useNameEditing(
-  folders, files, breadcrumbs, currentFolderId, fetchFiles
+  folders, files, breadcrumbs, currentFolderId, fetchFiles,
+  { targetUserId: targetUserIdRef }
 )
 
 /* 文件夹打包下载 */
-const { downloadingFolderId, downloadFolder } = useFolderDownload()
+const { downloadingFolderId: downloadingFolderId2, downloadFolder } = useFolderDownload({ targetUserId: targetUserIdRef })
 
-/* 拖拽/选择上传（含目录遍历/确保路径存在） */
+/* 拖拽/选择上传 */
 const {
   isDragging, onDragEnter, onDragLeave,
   fileInputRef, folderInputRef, overwriteExisting,
   handleDrop, handleFileSelect, handleFolderSelect
-} = useDnDUpload(currentFolderId, uploadMultipleFiles, fetchFiles, clearSelection)
+} = useDnDUpload(currentFolderId, uploadMultipleFiles, fetchFiles, clearSelection, { targetUserId: targetUserIdRef })
 
 /* 保持选择状态与列表同步 */
 watch([folders, files], () => reconcileSelection())

@@ -1,7 +1,9 @@
 import { FilesService } from '~/services/files.service'
 import type { FolderRecord, FileRecord } from '~/types/files'
 
-export function useFileBrowser() {
+export function useFileBrowser(options?: { targetUserId?: Ref<number | null> }) {
+  const tRef = options?.targetUserId
+
   const folders = ref<FolderRecord[]>([])
   const files = ref<FileRecord[]>([])
   const loading = ref(false)
@@ -14,7 +16,7 @@ export function useFileBrowser() {
   const fetchFiles = async () => {
     try {
       loading.value = true
-      const res = await FilesService.list(currentFolderId.value)
+      const res = await FilesService.list(currentFolderId.value, tRef?.value ?? null)
       if (res.success) {
         folders.value = res.folders || []
         files.value = res.files || []
@@ -44,6 +46,15 @@ export function useFileBrowser() {
   }
 
   onMounted(fetchFiles)
+
+  // 切换 targetUserId 时重置浏览状态
+  watch(tRef, () => {
+    folders.value = []
+    files.value = []
+    currentFolderId.value = null
+    breadcrumbs.value = [{ id: null, name: '全部文件' }]
+    fetchFiles()
+  })
 
   return {
     folders, files, loading, hasItems,

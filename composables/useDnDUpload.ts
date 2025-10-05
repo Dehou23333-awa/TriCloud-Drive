@@ -1,10 +1,7 @@
-// ~/composables/useDnDUpload.ts
 import { ref, type Ref } from 'vue'
 
 type UploadMultipleFiles = (files: File[], opts: { folderId: number | null; overwrite: boolean }) => Promise<void>
-
 type Entry = { file: File; relativePath: string }
-
 const toPosix = (p: string) => p.replace(/\\/g, '/')
 const normalizeDir = (p: string) => toPosix(p).replace(/^\/+|\/+$/g, '')
 
@@ -12,8 +9,10 @@ export function useDnDUpload(
   currentFolderId: Ref<number | null>,
   uploadMultipleFiles: UploadMultipleFiles,
   fetchFiles: () => Promise<void>,
-  clearSelection: () => void
+  clearSelection: () => void,
+  options?: { targetUserId?: Ref<number | null> }
 ) {
+  const tRef = options?.targetUserId
   const isDragging = ref(false)
   const dragCounter = ref(0)
 
@@ -31,13 +30,9 @@ export function useDnDUpload(
     dragCounter.value = 0
     isDragging.value = false
     const items = Array.from(event.dataTransfer?.items || [])
-    // 检测是否包含目录
     if (items.some((it: any) => typeof it.webkitGetAsEntry === 'function' && it.webkitGetAsEntry()?.isDirectory)) {
       const entries = await getFilesFromDataTransferItems(items as any)
-      if (entries.length) {
-        await handleEntries(entries)
-        return
-      }
+      if (entries.length) { await handleEntries(entries); return }
     }
     const fls = Array.from(event.dataTransfer?.files || [])
     if (fls.length > 0) await handleFiles(fls)
@@ -93,10 +88,7 @@ export function useDnDUpload(
     for (const [dir, fls] of groups) {
       const folderId = dir === '__ROOT__' ? baseParentId : (dirMap[dir] ?? baseParentId)
       try {
-        await uploadMultipleFiles(fls, {
-          folderId,
-          overwrite: overwriteExisting.value
-        })
+        await uploadMultipleFiles(fls, { folderId, overwrite: overwriteExisting.value })
       } catch (e) {
         console.error('文件夹内文件上传失败:', e)
       }
@@ -109,9 +101,11 @@ export function useDnDUpload(
   const ensurePaths = async (paths: string[], parentId: number | null) => {
     if (!paths.length) return {} as Record<string, number | null>
     try {
+      const body: any = { parentId, paths }
+      if (tRef?.value) body.targetUserId = tRef.value
       const res = await $fetch<{ success: boolean; map: Record<string, number> }>('/api/folders/ensure-paths', {
         method: 'POST',
-        body: { parentId, paths }
+        body
       })
       return res?.map || {}
     } catch (e) {
@@ -120,19 +114,17 @@ export function useDnDUpload(
     }
   }
 
-  // 目录遍历辅助
-  const readAllDirectoryEntries = (reader: any): Promise<any[]> => {
-    return new Promise((resolve) => {
-      const entries: any[] = []
-      const readBatch = () => {
-        reader.readEntries((batch: any[]) => {
-          if (batch.length === 0) resolve(entries)
-          else { entries.push(...batch); readBatch() }
-        }, () => resolve(entries))
-      }
-      readBatch()
-    })
-  }
+  // 目录遍历辅助...
+  const readAllDirectoryEntries = (reader: any): Promise<any[]> => new Promise((resolve) => {
+    const entries: any[] = []
+    const readBatch = () => {
+      reader.readEntries((batch: any[]) => {
+        if (batch.length === 0) resolve(entries)
+        else { entries.push(...batch); readBatch() }
+      }, () => resolve(entries))
+    }
+    readBatch()
+  })
 
   const traverseDirectoryEntry = async (dirEntry: any, path: string): Promise<Entry[]> => {
     const reader = dirEntry.createReader()
@@ -168,15 +160,12 @@ export function useDnDUpload(
   }
 
   return {
-    // UI
     isDragging,
     onDragEnter,
     onDragLeave,
-    // inputs
     fileInputRef,
     folderInputRef,
     overwriteExisting,
-    // handlers
     handleDrop,
     handleFileSelect,
     handleFolderSelect

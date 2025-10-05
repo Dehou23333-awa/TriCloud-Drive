@@ -9,16 +9,19 @@ export function useNameEditing(
   files: Ref<FileRecord[]>,
   breadcrumbs: Ref<Array<{ id: number; name: string }>>,
   currentFolderId: Ref<number | null>,
-  fetchFiles: () => Promise<void>
+  fetchFiles: () => Promise<void>,
+  options?: { targetUserId?: Ref<number | null> }
 ) {
-    const keepExtIfNone = (oldName: string, entered: string) => {
+  const tRef = options?.targetUserId
+
+  const keepExtIfNone = (oldName: string, entered: string) => {
     const trim = (entered || '').trim()
     if (!trim) return trim
     const hasExt = /\.[^./\\]+$/.test(trim)  // 修正正则
     if (hasExt) return trim
     const oldExt = oldName.match(/\.[^./\\]+$/)?.[0] || ''  // 修正正则
     return trim + oldExt
-    }
+  }
 
   const validateName = (name: string, isFolder = false) => {
     if (!name || !name.trim()) return '名称不能为空'
@@ -32,7 +35,7 @@ export function useNameEditing(
     const name = prompt('请输入新建文件夹名称：')?.trim()
     if (!name) return
     if (name.length > 255) return alert('文件夹名称过长（最多255字符）')
-    const res = await FoldersService.create(name, currentFolderId.value ?? null)
+    const res = await FoldersService.create(name, currentFolderId.value ?? null, tRef?.value ?? null)
     if (res.success) await fetchFiles()
     else alert(res.message || '创建失败')
   }
@@ -44,7 +47,7 @@ export function useNameEditing(
     const err = validateName(newName, true)
     if (err) return alert(err)
     if (newName === folder.name) return
-    const res = await FoldersService.rename(folder.id, newName)
+    const res = await FoldersService.rename(folder.id, newName, tRef?.value ?? null)
     if (!res.success) return alert(res.message || '重命名失败')
 
     const idx = folders.value.findIndex(f => f.id === folder.id)
@@ -59,7 +62,7 @@ export function useNameEditing(
     const err = validateName(finalName)
     if (err) return alert(err)
     if (finalName === file.filename) return
-    const res = await FilesService.rename(file.id, finalName)
+    const res = await FilesService.rename(file.id, finalName, tRef?.value ?? null)
     if (!res.success) return alert(res.message || '重命名失败')
     const idx = files.value.findIndex(f => f.id === file.id)
     if (idx >= 0) files.value[idx].filename = finalName

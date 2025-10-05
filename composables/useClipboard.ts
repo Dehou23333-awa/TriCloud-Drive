@@ -19,14 +19,19 @@ type Params = {
   clearSelection: () => void
 }
 
-export function useClipboard({
-  selectedFolderIds,
-  selectedFileIds,
-  selectedCount,
-  currentFolderId,
-  fetchFiles,
-  clearSelection
-}: Params) {
+export function useClipboard(
+  {
+    selectedFolderIds,
+    selectedFileIds,
+    selectedCount,
+    currentFolderId,
+    fetchFiles,
+    clearSelection
+  }: Params,
+  options?: { targetUserId?: Ref<number | null> }
+) {
+  const tRef = options?.targetUserId
+
   const clipboard = ref<ClipboardPayload | null>(null)
   const pasting = ref(false)
 
@@ -85,9 +90,11 @@ export function useClipboard({
     try {
       const targetFolderId = currentFolderId.value ?? null
       const c = clipboard.value!
+      const t = tRef?.value ?? null
+
       const res = c.mode === 'cut'
-        ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds)
-        : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds)
+        ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds, t)
+        : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds, t)
 
       if (!res?.success) {
         alert(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'))
@@ -104,14 +111,12 @@ export function useClipboard({
   }
 
   return {
-    // state
     clipboard,
     pasting,
     hasClipboard,
     clipboardCount,
     clipboardActionLabel,
     pasteBtnText,
-    // actions
     clipSelection,
     copySelection,
     clipFolder,
