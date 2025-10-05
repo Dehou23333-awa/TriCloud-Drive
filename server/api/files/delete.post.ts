@@ -1,9 +1,11 @@
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   try {
     // 验证用户认证
-    const user = await requireAuth(event)
+    //const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
     
     const { fileId } = await readBody(event)
 
@@ -29,7 +31,7 @@ export default defineEventHandler(async (event) => {
     // 查询文件信息，确保文件属于当前用户
     const fileRecord = await db
       .prepare('SELECT id, user_id, filename, file_key, file_size FROM files WHERE id = ? AND user_id = ?')
-      .bind(fileId, user.userId)
+      .bind(fileId, userId)
       .first()
 
     if (!fileRecord) {
@@ -88,7 +90,7 @@ export default defineEventHandler(async (event) => {
     // 从数据库中删除文件记录
     await db
       .prepare('DELETE FROM files WHERE id = ? AND user_id = ?')
-      .bind(fileId, user.userId)
+      .bind(fileId, userId)
       .run()
 
     // 重算法：根据该用户当前files总和重算 usedStorage
@@ -100,7 +102,7 @@ export default defineEventHandler(async (event) => {
         ), 0)
         WHERE id = ?
       `)
-      .bind(user.userId, user.userId)
+      .bind(userId, userId)
       .run()
 
     // 查询最新 usedStorage 以便返回给前端（可用于即时更新UI）

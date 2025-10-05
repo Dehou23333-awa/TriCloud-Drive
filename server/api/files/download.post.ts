@@ -1,4 +1,4 @@
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import crypto from 'crypto'
 import { getDb } from '~/server/utils/db-adapter'
 
@@ -38,7 +38,10 @@ const getAffectedRows = (res: any) =>
 
 export default defineEventHandler(async (event) => {
   try {
-    const user = await requireAuth(event)
+    //const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
+
     const { fileKey, filename } = await readBody(event)
 
     if (!fileKey) {
@@ -54,7 +57,7 @@ export default defineEventHandler(async (event) => {
     // 验证文件所有权
     const fileRecord = await db
       .prepare('SELECT * FROM files WHERE user_id = ? AND file_key = ?')
-      .bind(user.userId, fileKey)
+      .bind(userId, fileKey)
       .first()
 
     if (!fileRecord) {
@@ -76,7 +79,7 @@ export default defineEventHandler(async (event) => {
             OR COALESCE(usedDownload, 0) + ? <= COALESCE(maxDownload, 0)
           )
       `)
-      .bind(fileSize, user.userId, fileSize)
+      .bind(fileSize, userId, fileSize)
       .run()
 
     const reserved = getAffectedRows(reserveRes) > 0
@@ -93,7 +96,7 @@ export default defineEventHandler(async (event) => {
       try {
         await db
           .prepare('UPDATE users SET usedDownload = COALESCE(usedDownload, 0) - ? WHERE id = ?')
-          .bind(fileSize, user.userId)
+          .bind(fileSize, userId)
           .run()
       } catch (_) {
         // 忽略回滚失败

@@ -1,9 +1,10 @@
 // server/api/folders/manifest.get.ts
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event)
+  const { targetUserId } = await getMeAndTarget(event)
+  const userId = Number(targetUserId)
   const q = getQuery(event)
   const folderId = Number(q.folderId)
 
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
   // 校验文件夹归属
   const folder = await db
     .prepare('SELECT id, name FROM folders WHERE id = ? AND user_id = ?')
-    .bind(folderId, user.userId)
+    .bind(folderId, userId)
     .first()
 
   if (!folder) {
@@ -53,7 +54,7 @@ export default defineEventHandler(async (event) => {
       WHERE fl.user_id = ?
       ORDER BY relDir, filename
     `)
-    .bind(folderId, user.userId, user.userId, user.userId)
+    .bind(folderId, userId, userId, userId)
     .all()
 
   const files = (listRes as any)?.results ?? (listRes as any) ?? []
@@ -62,7 +63,7 @@ export default defineEventHandler(async (event) => {
   // 预检（不预占）：检查总大小是否会超出下载额度
   const quotaRow = await db
     .prepare('SELECT COALESCE(usedDownload, 0) AS usedDownload, COALESCE(maxDownload, 0) AS maxDownload FROM users WHERE id = ?')
-    .bind(user.userId)
+    .bind(userId)
     .first()
 
   const used = Number(quotaRow?.usedDownload ?? 0)

@@ -1,4 +1,4 @@
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
@@ -104,7 +104,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await requireAuth(event)
+    //const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
     const body = await readBody(event)
     const { filename, safeFilename, fileKey, fileSize, fileUrl, contentType, overwrite } = body || {}
     const folderId = normalizeFolderId(body?.folderId ?? (event as any)?.context?.folderId)
@@ -117,11 +119,11 @@ export default defineEventHandler(async (event) => {
     const db = getDb(event)
     if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
 
-    const userRow: any = await db.prepare('SELECT expire_at FROM users WHERE id = ?').bind(user.userId).first()
+    const userRow: any = await db.prepare('SELECT expire_at FROM users WHERE id = ?').bind(userId).first()
     if (!userRow) throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
     if (isExpired(userRow.expire_at)) throw createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
     if (folderId !== null) {
-      const chk = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?').bind(folderId, user.userId).first()
+      const chk = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?').bind(folderId, userId).first()
       if (!chk) throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
     }
 
@@ -131,10 +133,10 @@ export default defineEventHandler(async (event) => {
         let exist: any
         if (folderId === null) {
           exist = await db.prepare('SELECT id, file_size, file_key FROM files WHERE user_id = ? AND folder_id IS NULL AND filename = ? LIMIT 1')
-            .bind(user.userId, filename).first()
+            .bind(userId, filename).first()
         } else {
           exist = await db.prepare('SELECT id, file_size, file_key FROM files WHERE user_id = ? AND folder_id = ? AND filename = ? LIMIT 1')
-            .bind(user.userId, folderId, filename).first()
+            .bind(userId, folderId, filename).first()
         }
 
         if (exist?.id) {
@@ -147,7 +149,7 @@ export default defineEventHandler(async (event) => {
             WHERE id = ?
               AND (maxStorage = 0 OR usedStorage + ? <= maxStorage)
               AND (expire_at IS NULL OR expire_at > ?)
-          `).bind(delta, user.userId, delta, nowSqlString()).run()
+          `).bind(delta, userId, delta, nowSqlString()).run()
           const changes = (upd as any)?.meta?.changes ?? 0
           if (changes !== 1) {
             await db.prepare('ROLLBACK TO upload_tx').bind().run()
@@ -159,15 +161,15 @@ export default defineEventHandler(async (event) => {
             UPDATE files
             SET file_key = ?, file_size = ?, file_url = ?, content_type = ?, created_at = CURRENT_TIMESTAMP
             WHERE id = ? AND user_id = ?
-          `).bind(fileKey, size, fileUrl, contentType || 'application/octet-stream', exist.id, user.userId).run()
+          `).bind(fileKey, size, fileUrl, contentType || 'application/octet-stream', exist.id, userId).run()
 
-          const file = await db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ?').bind(exist.id, user.userId).first()
+          const file = await db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ?').bind(exist.id, userId).first()
           await db.prepare('RELEASE upload_tx').bind().run()
           return { success: true, message: '文件覆盖成功', file }
         }
       }
 
-      let { name: finalName, base, ext, nextN } = await resolveUniqueFilename(db, user.userId, folderId, filename)
+      let { name: finalName, base, ext, nextN } = await resolveUniqueFilename(db, userId, folderId, filename)
 
       const upd = await db.prepare(`
         UPDATE users
@@ -175,7 +177,7 @@ export default defineEventHandler(async (event) => {
         WHERE id = ?
           AND (maxStorage = 0 OR usedStorage + ? <= maxStorage)
           AND (expire_at IS NULL OR expire_at > ?)
-      `).bind(size, user.userId, size, nowSqlString()).run()
+      `).bind(size, userId, size, nowSqlString()).run()
       const changes = (upd as any)?.meta?.changes ?? 0
       if (changes !== 1) {
         await db.prepare('ROLLBACK TO upload_tx').bind().run()
@@ -192,7 +194,7 @@ export default defineEventHandler(async (event) => {
             VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING *
           `).bind(
-            user.userId,
+            userId,
             folderId,
             finalName,
             fileKey,

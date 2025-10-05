@@ -1,10 +1,11 @@
 // server/api/folders/delete.post.ts
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
   try {
-    const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
     const db = getDb(event)
     if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
 
@@ -17,7 +18,7 @@ export default defineEventHandler(async (event) => {
     // 先校验归属
     const own = await db
       .prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
-      .bind(id, user.userId)
+      .bind(id, userId)
       .first()
     if (!own) {
       throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
         )
         SELECT id FROM cte
       `)
-      .bind(id, user.userId, user.userId)
+      .bind(id, userId, userId)
       .all()
 
     const ids: number[] = (rows?.results || []).map((r: any) => Number(r.id)).filter((x: any) => Number.isInteger(x))
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
     // 在删除数据库前，先查出待删文件（用于COS删除）
     const filesRes: any = await db
       .prepare(`SELECT id, file_key, filename FROM files WHERE user_id = ? AND folder_id IN (${placeholders})`)
-      .bind(user.userId, ...ids)
+      .bind(userId, ...ids)
       .all()
     const filesToDelete: { id: number; file_key: string; filename?: string }[] =
       (filesRes?.results || []).filter((r: any) => !!r?.file_key)
@@ -104,7 +105,7 @@ export default defineEventHandler(async (event) => {
 
         cosDeleteAll = deletedCount === keys.length
         if (cosDeleteAll) {
-          console.log(`Successfully deleted ${deletedCount} file(s) from COS for user ${user.userId}`)
+          console.log(`Successfully deleted ${deletedCount} file(s) from COS for user ${userId}`)
         } else {
           console.warn(`COS deletion may be partial: ${deletedCount}/${keys.length}`)
         }
@@ -117,12 +118,12 @@ export default defineEventHandler(async (event) => {
     // 先删文件，再删文件夹（手动级联）
     await db
       .prepare(`DELETE FROM files WHERE user_id = ? AND folder_id IN (${placeholders})`)
-      .bind(user.userId, ...ids)
+      .bind(userId, ...ids)
       .run()
 
     await db
       .prepare(`DELETE FROM folders WHERE user_id = ? AND id IN (${placeholders})`)
-      .bind(user.userId, ...ids)
+      .bind(userId, ...ids)
       .run()
 
     // 重算用户存储用量
@@ -134,7 +135,7 @@ export default defineEventHandler(async (event) => {
         ), 0)
         WHERE id = ?
       `)
-      .bind(user.userId, user.userId)
+      .bind(userId, userId)
       .run()
 
     let message = '文件夹及其内容已删除'

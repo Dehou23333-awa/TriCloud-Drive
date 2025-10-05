@@ -1,5 +1,5 @@
 // server/folders/ensure-paths.post.ts
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
     const db = getDb(event)
     if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
 
@@ -31,7 +32,7 @@ export default defineEventHandler(async (event) => {
     if (!paths.length) return { success: true, map: {} }
 
     if (parentId !== null) {
-      const p = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?').bind(parentId, user.userId).first()
+      const p = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?').bind(parentId, userId).first()
       if (!p) throw createError({ statusCode: 404, statusMessage: '父级文件夹不存在或无权限' })
     }
 
@@ -48,18 +49,18 @@ export default defineEventHandler(async (event) => {
         for (const seg of segs) {
           let row: any
           if (currentParent === null) {
-            row = await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? LIMIT 1').bind(user.userId, seg).first()
+            row = await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? LIMIT 1').bind(userId, seg).first()
           } else {
-            row = await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? LIMIT 1').bind(user.userId, currentParent, seg).first()
+            row = await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? LIMIT 1').bind(userId, currentParent, seg).first()
           }
           if (!row) {
-            const ins: any = await db.prepare('INSERT INTO folders (user_id, parent_id, name) VALUES (?, ?, ?)').bind(user.userId, currentParent, seg).run()
+            const ins: any = await db.prepare('INSERT INTO folders (user_id, parent_id, name) VALUES (?, ?, ?)').bind(userId, currentParent, seg).run()
             const newId = ins?.meta?.lastID ?? ins?.meta?.insertId ?? ins?.meta?.last_row_id
             if (newId) currentParent = Number(newId)
             else {
               const back: any = currentParent === null
-                ? await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? ORDER BY id DESC LIMIT 1').bind(user.userId, seg).first()
-                : await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? ORDER BY id DESC LIMIT 1').bind(user.userId, currentParent, seg).first()
+                ? await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? ORDER BY id DESC LIMIT 1').bind(userId, seg).first()
+                : await db.prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? ORDER BY id DESC LIMIT 1').bind(userId, currentParent, seg).first()
               currentParent = Number(back?.id)
             }
           } else {

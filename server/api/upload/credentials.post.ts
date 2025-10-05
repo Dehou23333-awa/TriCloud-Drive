@@ -1,4 +1,4 @@
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import crypto from 'crypto'
 
@@ -61,7 +61,8 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const user = { userId: targetUserId } // 仅 userId 用于后续查询
     const config = useRuntimeConfig()
     const db = getDb(event)
     if (!db) {

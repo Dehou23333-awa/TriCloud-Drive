@@ -1,5 +1,5 @@
 import { defineEventHandler, readBody } from 'h3'
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 function placeholders(n: number) {
@@ -17,8 +17,9 @@ function hasDuplicates(list: string[]) {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event)
-  const userId = user.userId as number
+  //const user = await requireAuth(event)
+  const { targetUserId } = await getMeAndTarget(event)
+  const userId = Number( targetUserId )
   const db = getDb(event)
 
   const body = await readBody<{

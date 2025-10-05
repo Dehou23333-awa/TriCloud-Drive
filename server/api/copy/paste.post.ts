@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody } from 'h3'
 import { getDb } from '~/server/utils/db-adapter'
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import COS from 'cos-nodejs-sdk-v5'
 import tencentcloud from 'tencentcloud-sdk-nodejs'
 import crypto from 'node:crypto'
@@ -206,8 +206,9 @@ function nowSqlString(): string {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event)
-  const userId = Number(user.userId)
+  const { targetUserId } = await getMeAndTarget(event)
+  //const user = await requireAuth(event)
+  const userId = Number(targetUserId)
   const db: any = getDb(event)
   if (!db) return { success: false, message: '数据库连接失败' }
 

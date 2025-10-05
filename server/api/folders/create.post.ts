@@ -1,5 +1,5 @@
 // server/api/folders/create.post.ts
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
@@ -15,7 +15,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await requireAuth(event)
+    //const user = await requireAuth(event)
+    const { targetUserId } = await getMeAndTarget(event)
+    const userId = Number(targetUserId)
     const db = getDb(event)
     if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
 
@@ -34,7 +36,7 @@ export default defineEventHandler(async (event) => {
     if (parentId !== null) {
       const p = await db
         .prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
-        .bind(parentId, user.userId)
+        .bind(parentId, userId)
         .first()
       if (!p) throw createError({ statusCode: 404, statusMessage: '父级文件夹不存在或无权限' })
     }
@@ -42,9 +44,9 @@ export default defineEventHandler(async (event) => {
     // 防重（同一父级下不允许重名）
     const exists = parentId === null
       ? await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ?')
-          .bind(user.userId, nameRaw).first()
+          .bind(userId, nameRaw).first()
       : await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id = ? AND name = ?')
-          .bind(user.userId, parentId, nameRaw).first()
+          .bind(userId, parentId, nameRaw).first()
 
     if (exists) {
       throw createError({ statusCode: 409, statusMessage: '已存在同名文件夹' })
@@ -53,7 +55,7 @@ export default defineEventHandler(async (event) => {
     // 插入
     const ins: any = await db
       .prepare('INSERT INTO folders (user_id, parent_id, name) VALUES (?, ?, ?)')
-      .bind(user.userId, parentId, nameRaw)
+      .bind(userId, parentId, nameRaw)
       .run()
 
     // 获取新ID（兼容 sqlite/MySQL/D1）
@@ -62,7 +64,7 @@ export default defineEventHandler(async (event) => {
     if (newId) {
       folder = await db
         .prepare('SELECT id, name, parent_id AS parentId, created_at AS createdAt FROM folders WHERE id = ? AND user_id = ?')
-        .bind(newId, user.userId)
+        .bind(newId, userId)
         .first()
     } else {
       // 兜底查询（以防不同驱动 meta 差异）
@@ -74,7 +76,7 @@ export default defineEventHandler(async (event) => {
           ORDER BY id DESC
           LIMIT 1
         `)
-        .bind(...([user.userId, nameRaw] as any[]).concat(parentId === null ? [] : [parentId]))
+        .bind(...([userId, nameRaw] as any[]).concat(parentId === null ? [] : [parentId]))
         .first()
     }
 

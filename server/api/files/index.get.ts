@@ -1,8 +1,7 @@
 // server/api/files/index.get.ts
-import { requireAuth, requireAdmin, getMeAndTarget } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { getQuery } from 'h3'
-import { effect } from 'vue'
 
 export default defineEventHandler(async (event) => {
   try {
