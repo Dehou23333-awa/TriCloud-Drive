@@ -1,7 +1,16 @@
 <!-- pages/index.vue -->
 <template>
   <div class="min-h-screen bg-gray-50">
-    <AppNavbar />
+    <AppNavbar>
+      <template #extra>
+        <NuxtLink
+          to="/services/change-password"
+          class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+        >
+          修改密码
+        </NuxtLink>
+      </template>
+    </AppNavbar>
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div v-if="!isLoggedIn" class="px-4 py-6 sm:px-0">
         <div class="text-center">

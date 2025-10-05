@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   isAdmin?: boolean
   isSuperAdmin?: boolean
   canChangePassword?: boolean
+  password_hash?: string
 }
 
 // 在一次请求内缓存认证结果，避免重复查询
@@ -58,7 +59,7 @@ export async function requireAuth(event: any, opts?: { withUser?: boolean }): Pr
     throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
   }
   const row = await db
-    .prepare('SELECT id, username, email, IsAdmin, IsSuperAdmin, canChangePassword FROM users WHERE id = ?')
+    .prepare('SELECT id, username, email, IsAdmin, IsSuperAdmin, canChangePassword, password_hash FROM users WHERE id = ?')
     .bind(decoded.userId)
     .first() as any
 
@@ -73,6 +74,7 @@ export async function requireAuth(event: any, opts?: { withUser?: boolean }): Pr
     isAdmin: !!(row.IsAdmin === true || row.IsAdmin === 1),
     isSuperAdmin: !!(row.IsSuperAdmin === true || row.IsSuperAdmin === 1),
     canChangePassword: !!(row.canChangePassword === true || row.canChangePassword === 1),
+    password_hash: row.password_hash
   }
   cache.set(fullUser)
   return fullUser
