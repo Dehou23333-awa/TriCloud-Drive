@@ -1,11 +1,12 @@
 // server/api/auth/change-password.post.ts
 import { readBody, createError } from 'h3'
 import { getDb } from '~/server/utils/db-adapter' // 按你的文件实际路径调整
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { requireAuth, getMeAndTarget } from '~/server/utils/auth-middleware'
 import { validatePassword, verifyPassword, hashPassword } from '~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event, { withUser: true } )
+  //const user = await requireAuth(event, { withUser: true } )
+  const { targetUserId } = await getMeAndTarget(event)
   
   const body = await readBody(event)
   const currentPassword = String(body?.currentPassword || '')
@@ -19,17 +20,26 @@ export default defineEventHandler(async (event) => {
   }
   
   const db = getDb(event)
+  
   if (!db) {
     throw createError({
       statusCode: 500,
       statusMessage: '数据库连接失败'
     })
   }
+  const userService = new UserService(db)
+  const user = await userService.getUserById(Number(targetUserId))
+  if (!user) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: '用户查询失败'
+    })
+  }
   
   // 读取用户
   const row: any = await db
     .prepare('SELECT id, password_hash FROM users WHERE id = ?')
-    .bind(user.userId)
+    .bind(user.id)
     .first()
 
   if (!row?.id) {

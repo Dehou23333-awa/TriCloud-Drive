@@ -112,7 +112,7 @@ export async function getMeAndTarget(event: any): Promise<{ me: AuthenticatedUse
 
   // 只需校验是否管理员：当操作他人资源时需要管理员
   if (targetUserId !== me.userId && !(me.isAdmin || me.isSuperAdmin)) {
-    throw createError({ statusCode: 403, statusMessage: '仅管理员可操作他人文件' })
+    throw createError({ statusCode: 403, statusMessage: '仅管理员可操（作）（？？？他人' })
   }
   return { me, targetUserId }
 }
