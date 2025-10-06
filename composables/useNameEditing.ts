@@ -34,10 +34,10 @@ export function useNameEditing(
   const createFolder = async () => {
     const name = prompt('请输入新建文件夹名称：')?.trim()
     if (!name) return
-    if (name.length > 255) return alert('文件夹名称过长（最多255字符）')
+    if (name.length > 255) return notify('文件夹名称过长（最多255字符）','error')
     const res = await FoldersService.create(name, currentFolderId.value ?? null, tRef?.value ?? null)
     if (res.success) await fetchFiles()
-    else alert(res.message || '创建失败')
+    else notify(res.message || '创建失败', 'error')
   }
 
   const renameFolder = async (folder: FolderRecord) => {
@@ -45,10 +45,10 @@ export function useNameEditing(
     if (entered == null) return
     const newName = entered.trim()
     const err = validateName(newName, true)
-    if (err) return alert(err)
+    if (err) return notify(err, 'error')
     if (newName === folder.name) return
     const res = await FoldersService.rename(folder.id, newName, tRef?.value ?? null)
-    if (!res.success) return alert(res.message || '重命名失败')
+    if (!res.success) return notify(res.message || '重命名失败', 'error')
 
     const idx = folders.value.findIndex(f => f.id === folder.id)
     if (idx >= 0) folders.value[idx].name = newName
@@ -60,10 +60,10 @@ export function useNameEditing(
     if (entered == null) return
     const finalName = keepExtIfNone(file.filename, entered)
     const err = validateName(finalName)
-    if (err) return alert(err)
+    if (err) return notify(err, 'error')
     if (finalName === file.filename) return
     const res = await FilesService.rename(file.id, finalName, tRef?.value ?? null)
-    if (!res.success) return alert(res.message || '重命名失败')
+    if (!res.success) return notify(res.message || '重命名失败', 'error')
     const idx = files.value.findIndex(f => f.id === file.id)
     if (idx >= 0) files.value[idx].filename = finalName
   }

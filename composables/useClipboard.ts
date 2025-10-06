@@ -97,14 +97,14 @@ export function useClipboard(
         : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds, t)
 
       if (!res?.success) {
-        alert(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'))
+        notify(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'), 'error')
         return
       }
       clipboard.value = null
       clearSelection()
       await fetchFiles()
     } catch (e: any) {
-      alert(e?.message || '粘贴失败，请稍后重试')
+      notify(e?.message || '粘贴失败，请稍后重试','error')
     } finally {
       pasting.value = false
     }

@@ -18,7 +18,7 @@ export function useFolderDownload(options?: { targetUserId?: Ref<number | null> 
       const manifest = await FoldersService.manifest(folder.id, t)
       if (!manifest?.success) throw new Error('无法获取清单')
       if (!manifest.files?.length) {
-        alert('该文件夹为空')
+        notify('该文件夹为空','error')
         return
       }
       const go = confirm(`将打包下载 "${folder.name}"（${manifest.totals.count} 个文件，共约 ${formatFileSize(manifest.totals.bytes)}）。继续？`)
@@ -32,10 +32,10 @@ export function useFolderDownload(options?: { targetUserId?: Ref<number | null> 
         await sink.addFromUrl(entryPath, sign.data.downloadUrl)
       }
       await sink.close()
-      alert('打包完成，已保存。')
+      notify('打包完成，已保存。', 'success')
     } catch (e: any) {
       console.error('文件夹下载失败:', e)
-      alert(e?.message || '文件夹下载失败，请稍后重试')
+      notify(e?.message || '文件夹下载失败，请稍后重试', 'error')
     } finally {
       downloadingFolderId.value = null
     }

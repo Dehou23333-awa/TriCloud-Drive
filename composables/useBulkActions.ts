@@ -5,6 +5,7 @@ import { createZipSink } from '~/utils/zipper'
 import { formatFileSize } from '~/utils/format'
 import type { FolderRecord, FileRecord } from '~/types/files'
 import { ref, type Ref } from 'vue'
+import { notify } from '~/utils/notify'
 
 export function useBulkActions(
   folders: Ref<FolderRecord[]>,
@@ -30,9 +31,9 @@ export function useBulkActions(
     if (res.success) {
       files.value = files.value.filter(f => f.id !== file.id)
       selectedFileIds.value.delete(file.id)
-      alert('文件删除成功')
+      notify('文件删除成功', 'success')
     } else {
-      alert(res.message || '删除失败')
+      notify(res.message || '删除失败', 'error')
     }
   }
 
@@ -43,9 +44,9 @@ export function useBulkActions(
     if (res.success) {
       folders.value = folders.value.filter(f => f.id !== folder.id)
       selectedFolderIds.value.delete(folder.id)
-      alert('文件夹删除成功')
+      notify('文件夹删除成功','success')
     } else {
-      alert(res.message || '删除失败')
+      notify(res.message || '删除失败','error')
     }
   }
 
@@ -78,11 +79,11 @@ export function useBulkActions(
 
       const failed = results.filter(r => !r.ok)
       if (failed.length) {
-        alert(`部分删除失败：${failed.length} 项。\n` + failed.slice(0, 5).map(r =>
+        notify(`部分删除失败：${failed.length} 项。\n` + failed.slice(0, 5).map(r =>
           `${r.type === 'folder' ? '文件夹' : '文件'} #${r.id}: ${r.message || '失败'}`
-        ).join('\n'))
+        ).join('\n'),'error')
       } else {
-        alert('删除成功')
+        notify('删除成功','success')
       }
     } finally {
       bulkDeleting.value = false
@@ -141,10 +142,10 @@ export function useBulkActions(
       }
 
       await sink.close()
-      alert('打包完成，已保存。')
+      notify('打包完成，已保存。','success')
     } catch (e: any) {
       console.error('批量下载失败:', e)
-      alert(e?.message || '批量下载失败，请稍后重试')
+      notify(e?.message || '批量下载失败，请稍后重试','error')
     } finally {
       bulkDownloading.value = false
     }
