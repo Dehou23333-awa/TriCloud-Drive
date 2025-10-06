@@ -190,6 +190,7 @@ const handleChangePassword = async () => {
     form.currentPassword = ''
     form.newPassword = ''
     form.confirmPassword = ''
+    useAuth().logout?.()
     setTimeout(() => navigateTo("/login"), 1000)
   } catch (err: any) {
     error.value = err?.data?.message || err?.message || '修改失败，请重试'
