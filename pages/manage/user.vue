@@ -181,17 +181,16 @@
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.email }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ u.username }}</td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatToUTC8(u.created_at) }}</td>
+                  <!-- 套餐过期时间 -->
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <input
-                      type="text"
+                      type="datetime-local"
                       v-model="u.expire_at"
                       @blur="normalizeExpireAt(u)"
                       :disabled="updatingId === u.id"
                       class="w-56 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      placeholder="YYYY-MM-DD HH:mm:ss（留空为不过期）"
-                      inputmode="numeric"
-                      autocomplete="off"
-                      title="格式：YYYY-MM-DD HH:mm:ss，留空表示不过期"
+                      step="1"
+                      title="选择日期时间；清空表示不过期"
                     />
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
@@ -277,6 +276,14 @@
 
                   <td class="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                     <button
+                      @click="changePassword(u)"
+                      :disabled="changingPwdId === u.id"
+                      class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-md text-sm border"
+                    >
+                      {{ changingPwdId === u.id ? '修改中...' : '修改密码' }}
+                    </button>
+
+                    <button
                       @click="saveUser(u)"
                       :disabled="updatingId === u.id"
                       class="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-md text-sm border"
@@ -305,6 +312,7 @@
 
 <script setup lang="ts">
 import { formatToUTC8 } from '~/server/utils/time'
+import { notify } from '~/utils/notify'
 
 type DbUser = {
   id: number
@@ -329,10 +337,41 @@ type ApiUser = Omit<DbUser, 'usedStorage' | 'maxStorage' | 'usedDownload' | 'max
   maxDownload: number
 }
 
-const { user, isLoggedIn, logout, register} = useAuth()
+const { user, isLoggedIn, register} = useAuth()
 
-const handleLogout = async () => {
-  await logout()
+
+// 修改密码中的用户 ID
+const changingPwdId = ref<number | null>(null)
+
+const changePassword = async (u: DbUser) => {
+  if (!u?.id) return
+
+  const input = window.prompt(`为用户「${u.username}」设置新密码（至少8位，包含字母和数字）：`, '')
+  if (input === null) return // 取消
+  const newPassword = input.trim()
+
+  // 简单校验：至少8位，且包含字母和数字
+  if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    notify('密码不符合要求：至少8位，且需包含字母和数字','error')
+    return
+  }
+
+  changingPwdId.value = u.id
+  try {
+    await $fetch('/api/auth/change-password/', {
+      method: 'POST',
+      body: {
+        targetUserId: u.id,
+        newPassword
+      }
+    })
+    notify('密码已更新','success')
+  } catch (err: any) {
+    const msg = err?.data?.statusMessage || '修改密码失败'
+    notify(msg, 'error')
+  } finally {
+    changingPwdId.value = null
+  }
 }
 
 const users = ref<DbUser[]>([])
@@ -385,7 +424,7 @@ const deleteUser = async (u: DbUser) => {
     await fetchUsers()
   } catch (err: any) {
     const msg = err?.data?.statusMessage || '删除失败'
-    alert(msg)
+    notify(msg, 'error')
   } finally {
     deletingId.value = null
   }
@@ -514,8 +553,8 @@ const saveUser = async (u: DbUser) => {
   try {
     updatingId.value = u.id
 
-    // 确保先规范化（即使没触发 blur）
-    const normalizedExpire = parseExpireAt((u.expire_at as string | null) ?? null)
+    // 从 datetime-local 字符串转回 "YYYY-MM-DD HH:mm:ss"（或 null）
+    const normalizedExpire = fromDatetimeLocal((u.expire_at as string | null) ?? null)
 
     const payload = {
       id: u.id,
@@ -525,8 +564,7 @@ const saveUser = async (u: DbUser) => {
       usedStorage: parseBytes(u.usedStorage as string | number),
       maxDownload: parseBytes(u.maxDownload as string | number),
       usedDownload: parseBytes(u.usedDownload as string | number),
-      // 留空则传 null，表示不过期
-      expire_at: normalizedExpire
+      expire_at: normalizedExpire // 传给后端的仍是空格分隔格式
     }
 
     await $fetch('/api/manage/updateUser', {
@@ -534,12 +572,12 @@ const saveUser = async (u: DbUser) => {
       body: payload
     })
 
-    // 保存成功后，统一成标准格式显示
+    // 保存成功后，把显示值转回 datetime-local 需要的格式
     u.maxStorage = formatBytes(payload.maxStorage)
     u.usedStorage = formatBytes(payload.usedStorage)
     u.maxDownload = formatBytes(payload.maxDownload)
     u.usedDownload = formatBytes(payload.usedDownload)
-    u.expire_at = payload.expire_at ?? ''
+    u.expire_at = payload.expire_at ? toDatetimeLocal(payload.expire_at) : ''
   } catch (err) {
     console.error('更新用户失败:', err)
     await fetchUsers()
@@ -585,12 +623,33 @@ const normalizeExpireAt = (u: DbUser) => {
     u.expire_at = ''
     return
   }
-  const normalized = parseExpireAt(raw)
+  const normalized = fromDatetimeLocal(raw)
   if (!normalized) {
-    alert('过期时间格式无效，请使用 YYYY-MM-DD HH:mm:ss，例如：2026-12-31 11:20:28')
+    notify('过期时间无效，请重新选择', 'error')
+    u.expire_at = ''
     return
   }
-  u.expire_at = normalized
+  // 保持为 datetime-local 需要的格式（带 T，含秒）
+  u.expire_at = normalized.replace(' ', 'T')
+}
+// 把 "YYYY-MM-DD HH:mm:ss"/"YYYY-MM-DDTHH:mm:ss" -> "YYYY-MM-DDTHH:mm:ss"
+const toDatetimeLocal = (val: string | null): string => {
+  if (!val) return ''
+  const s = String(val).trim()
+  if (!s) return ''
+  const normalized = parseExpireAt(s) // 返回 "YYYY-MM-DD HH:mm:ss" 或 null
+  if (!normalized) return ''
+  return normalized.replace(' ', 'T')
+}
+
+// 把 "YYYY-MM-DDTHH:mm[:ss]" -> "YYYY-MM-DD HH:mm:ss"（给后端）
+const fromDatetimeLocal = (val: string | null): string | null => {
+  if (!val) return null
+  const s = String(val).trim()
+  if (!s) return null
+  // 若无秒，补 ":00"
+  const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) ? s + ':00' : s
+  return parseExpireAt(withSeconds) // 返回 "YYYY-MM-DD HH:mm:ss" 或 null
 }
 
 definePageMeta({
