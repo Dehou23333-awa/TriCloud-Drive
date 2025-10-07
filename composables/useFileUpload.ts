@@ -27,7 +27,7 @@ interface UploadProgress {
   percent: number
 }
 
-type UploadOptions = { folderId?: number | null; overwrite?: boolean; partOfBatch?: boolean; onProgressDelta?: (delta: number) => void }
+type UploadOptions = { folderId?: number | null; overwrite?: boolean; skip?:boolean; partOfBatch?: boolean; onProgressDelta?: (delta: number) => void }
 
 export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) => {
   const tRef = options?.targetUserId
@@ -45,31 +45,37 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
     fileSize: number
     folderId?: number | null
     overwrite?: boolean
+    skip?: boolean
   }): Promise<UploadConfig> => {
     const body: any = {
       filename: params.filename,
       fileSize: params.fileSize,
       folderId: params.folderId ?? null,
-      overwrite: !!params.overwrite
+      overwrite: !!params.overwrite,
+      skipIfExist: !!params.skip
     }
     if (tRef?.value) body.targetUserId = tRef.value
     const response = await $fetch<{ success: boolean; data: UploadConfig }>('/api/upload/credentials', {
       method: 'POST',
       body
     })
-    if (!response.success) throw new Error('获取上传凭证失败')
+    if (!response.success) 
+    {
+      throw new Error('获取上传凭证失败')
+    }
     return response.data
   }
 
-  const uploadFile = async (file: File, options2?: UploadOptions): Promise<string> => {
+  const uploadFile = async (file: File, options2?: UploadOptions): Promise<undefined> => {
     const partOfBatch = !!options2?.partOfBatch
     const folderId = options2?.folderId ?? null
     const overwrite = !!options2?.overwrite
+    const skip = !!options2?.skip
 
     try {
       if (!partOfBatch) { uploading.value = true; uploadError.value = ''; setProgress(0, file.size) }
 
-      const config = await getUploadCredentials({ filename: file.name, fileSize: file.size, folderId, overwrite })
+      const config = await getUploadCredentials({ filename: file.name, fileSize: file.size, folderId, overwrite, skip })
 
       if (config.demoMode) {
         let lastLoaded = 0
@@ -94,7 +100,7 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
         }
         if (tRef?.value) body.targetUserId = tRef.value
         await $fetch('/api/files/save', { method: 'POST', body })
-        return fileUrl
+        return
       }
 
       const cos = new COS({
@@ -143,20 +149,28 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
         if (tRef?.value) body.targetUserId = tRef.value
         await $fetch('/api/files/save', { method: 'POST', body })
       }
-
-      return fileUrl
+      //console.log(fileUrl)
+      return
     } catch (error: any) {
-      if (!partOfBatch) uploadError.value = error.message || '上传失败'
-      throw error
+      if (skip === true)
+      {
+        notify(file.name + '已跳过','success')
+      }
+      else if (!partOfBatch) 
+      {
+        notify(error.message || '上传失败', 'error')
+        uploadError.value = error.message || '上传失败'
+        throw error
+      }
     } finally {
       if (!partOfBatch) uploading.value = false
     }
   }
 
-  const uploadMultipleFiles = async (files: File[], options3?: { folderId?: number | null; overwrite?: boolean }): Promise<string[]> => {
-    const results: string[] = []
+  const uploadMultipleFiles = async (files: File[], options3?: { folderId?: number | null; overwrite?: boolean; skip?: boolean }): Promise<undefined> => {
     const folderId = options3?.folderId ?? null
     const overwrite = !!options3?.overwrite
+    const skip = !!options3?.skip
 
     const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
     let aggregatedLoaded = 0
@@ -170,19 +184,21 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
         const url = await uploadFile(file, {
           folderId,
           overwrite,
+          skip,
           partOfBatch: true,
           onProgressDelta: (delta: number) => {
             aggregatedLoaded += delta
             setProgress(aggregatedLoaded, totalBytes)
           }
         })
-        results.push(url)
       }
       setProgress(totalBytes, totalBytes)
-      return results
+      return
     } catch (error: any) {
+      notify(error.message || '上传失败', 'error')
       uploadError.value = error.message || '上传失败'
       throw error
+
     } finally {
       uploading.value = false
     }

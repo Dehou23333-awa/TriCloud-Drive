@@ -1,6 +1,7 @@
 import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import crypto from 'crypto'
+import { UserService } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
   // 处理 CORS 预检
@@ -62,16 +63,24 @@ export default defineEventHandler(async (event) => {
 
   try {
     const { targetUserId } = await getMeAndTarget(event)
-    const user = { userId: targetUserId } // 仅 userId 用于后续查询
     const config = useRuntimeConfig()
     const db = getDb(event)
+    
+
     if (!db) {
       throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
     }
+    const userService = new UserService(db)
 
     const body = await readBody(event)
-    const { filename, fileSize, overwrite } = body
+    const { filename, fileSize, overwrite, skipIfExist } = body
     const folderId = normalizeFolderId(body?.folderId)
+
+
+    if (overwrite === true && skipIfExist === true)
+    {
+      throw createError({ statusCode: 400, statusMessage: '不能既覆盖又跳过文件'})
+    }
 
     if (!filename) {
       throw createError({ statusCode: 400, statusMessage: '文件名不能为空' })
@@ -82,40 +91,39 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
     }
 
-    // 校验用户配额与过期
-    const quotaRow: any = await db
-      .prepare('SELECT usedStorage, maxStorage, expire_at FROM users WHERE id = ?')
-      .bind(user.userId)
-      .first()
-
-    if (!quotaRow) {
+    const user = await userService.getUserById(Number(targetUserId))
+    if (!user)
+    {
       throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
     }
-    if (isExpired(quotaRow.expire_at)) {
+    if (isExpired(user.expire_at)) {
       throw createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
     }
 
-    const usedStorage = Number(quotaRow.usedStorage ?? 0) || 0
-    const maxStorage = Number(quotaRow.maxStorage ?? 0) || 0
+    const usedStorage = Number(user.usedStorage ?? 0) || 0
+    const maxStorage = Number(user.maxStorage ?? 0) || 0
 
     // 若选择覆盖且存在同名文件，则抵扣旧文件大小
     let usedForCheck = usedStorage
-    if (overwrite === true) {
+    if (overwrite === true || skipIfExist === true) {
       let row: any
       if (folderId === null) {
         row = await db
           .prepare('SELECT file_size FROM files WHERE user_id = ? AND folder_id IS NULL AND filename = ? LIMIT 1')
-          .bind(user.userId, filename)
+          .bind(user.id, filename)
           .first()
       } else {
         row = await db
           .prepare('SELECT file_size FROM files WHERE user_id = ? AND folder_id = ? AND filename = ? LIMIT 1')
-          .bind(user.userId, folderId, filename)
+          .bind(user.id, folderId, filename)
           .first()
       }
-      if (row?.file_size != null) {
+      if (row?.file_size != null && overwrite === true) {
         usedForCheck = usedStorage - Number(row.file_size)
         if (usedForCheck < 0) usedForCheck = 0
+      } else if (row?.file_size != null && skipIfExist === true)
+      {
+        return { success: false, message: '当前目录下已存在该文件' }
       }
     }
 
@@ -127,7 +135,7 @@ export default defineEventHandler(async (event) => {
     if (folderId !== null) {
       const chk = await db
         .prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
-        .bind(folderId, user.userId)
+        .bind(folderId, user.id)
         .first()
       if (!chk) {
         throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
@@ -141,7 +149,7 @@ export default defineEventHandler(async (event) => {
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const safeFilename = `${uuid}${fileExtension}`
-    const fileKey = `users/${user.userId}/${year}${month}/${safeFilename}`
+    const fileKey = `users/${user.id}/${year}${month}/${safeFilename}`
 
     // 检查 COS 密钥
     if (!config.tencentSecretId || !config.tencentSecretKey ||
@@ -182,8 +190,8 @@ export default defineEventHandler(async (event) => {
           }
         ]
       }),
-      DurationSeconds: 1800,
-      Name: `cos-upload-${user.userId}-${Date.now()}`
+      DurationSeconds: config.cdnAuthTtl,
+      Name: `cos-upload-${user.id}-${Date.now()}`
     }
 
     const response = await client.GetFederationToken(params)
@@ -200,7 +208,7 @@ export default defineEventHandler(async (event) => {
           TmpSecretKey: credentials.TmpSecretKey,
           SecurityToken: credentials.Token,
           StartTime: Math.floor(Date.now() / 1000),
-          ExpiredTime: Math.floor(Date.now() / 1000) + 1800
+          ExpiredTime: Math.floor(Date.now() / 1000) + config.cdnAuthTtl
         },
         bucket: config.cosBucket,
         region: config.cosRegion,

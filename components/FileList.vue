@@ -99,12 +99,24 @@
               <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" @click="folderInputRef?.click()">
                 上传文件夹
               </button>
+              <!-- 这里是改动：复选框 -> 三个单选框 -->
               <div class="px-4 py-2 border-t border-gray-100">
-                <label class="flex items-center gap-2 text-xs text-gray-600">
-                  <input type="checkbox" v-model="overwriteExisting" class="rounded border-gray-300" />
-                  同名时覆盖
-                </label>
+                <div class="space-y-2 text-xs text-gray-600">
+                  <label class="flex items-center gap-2">
+                    <input type="radio" name="upload-conflict" class="text-indigo-600" value="overwrite" v-model="conflictStrategy" />
+                    同名时覆盖
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input type="radio" name="upload-conflict" class="text-indigo-600" value="skip" v-model="conflictStrategy" />
+                    同名时跳过
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input type="radio" name="upload-conflict" class="text-indigo-600" value="rename" v-model="conflictStrategy" />
+                    自动重命名
+                  </label>
+                </div>
               </div>
+              <!-- 改动结束 -->
             </div>
           </transition>
         </div>
@@ -258,7 +270,7 @@
 </template>
 
 <script setup lang="ts">
-import { toRef, watch } from 'vue'
+import { toRef, watch, computed } from 'vue'
 import { formatToUTC8 } from '~/server/utils/time'
 import { useFileBrowser } from '~/composables/useFileBrowser'
 import { useDualSelection } from '~/composables/useDualSelection'
@@ -277,6 +289,19 @@ const props = defineProps<{
   title?: string
 }>()
 const targetUserIdRef = toRef(props, 'targetUserId')
+
+// 三态单选与两个布尔变量的映射
+const conflictStrategy = computed<'overwrite' | 'skip' | 'rename'>({
+  get() {
+    if (overwriteExisting.value) return 'overwrite'
+    if (skipExisting.value) return 'skip'
+    return 'rename'
+  },
+  set(v) {
+    overwriteExisting.value = v === 'overwrite'
+    skipExisting.value = v === 'skip'
+  }
+})
 
 /* 列表/导航 */
 const {
@@ -330,7 +355,8 @@ const { downloadingFolderId: downloadingFolderId2, downloadFolder } = useFolderD
 const {
   isDragging, onDragEnter, onDragLeave,
   fileInputRef, folderInputRef, overwriteExisting,
-  handleDrop, handleFileSelect, handleFolderSelect
+  handleDrop, handleFileSelect, handleFolderSelect,
+  skipExisting
 } = useDnDUpload(currentFolderId, uploadMultipleFiles, fetchFiles, clearSelection, { targetUserId: targetUserIdRef })
 
 /* 保持选择状态与列表同步 */

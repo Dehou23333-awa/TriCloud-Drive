@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
 
-type UploadMultipleFiles = (files: File[], opts: { folderId: number | null; overwrite: boolean }) => Promise<void>
+type UploadMultipleFiles = (files: File[], opts: { folderId: number | null; overwrite: boolean; skip: boolean }) => Promise<void>
 type Entry = { file: File; relativePath: string }
 const toPosix = (p: string) => p.replace(/\\/g, '/')
 const normalizeDir = (p: string) => toPosix(p).replace(/^\/+|\/+$/g, '')
@@ -19,6 +19,7 @@ export function useDnDUpload(
   const fileInputRef = ref<HTMLInputElement | null>(null)
   const folderInputRef = ref<HTMLInputElement | null>(null)
   const overwriteExisting = ref(false)
+  const skipExisting = ref(false)
 
   const onDragEnter = () => { dragCounter.value++; isDragging.value = true }
   const onDragLeave = () => {
@@ -64,7 +65,8 @@ export function useDnDUpload(
     try {
       await uploadMultipleFiles(fls, {
         folderId: currentFolderId.value ?? null,
-        overwrite: overwriteExisting.value
+        overwrite: overwriteExisting.value,
+        skip: skipExisting.value,
       })
       clearSelection()
       await fetchFiles()
@@ -88,7 +90,7 @@ export function useDnDUpload(
     for (const [dir, fls] of groups) {
       const folderId = dir === '__ROOT__' ? baseParentId : (dirMap[dir] ?? baseParentId)
       try {
-        await uploadMultipleFiles(fls, { folderId, overwrite: overwriteExisting.value })
+        await uploadMultipleFiles(fls, { folderId, overwrite: overwriteExisting.value, skip: skipExisting.value, })
       } catch (e) {
         console.error('文件夹内文件上传失败:', e)
       }
@@ -168,6 +170,7 @@ export function useDnDUpload(
     overwriteExisting,
     handleDrop,
     handleFileSelect,
-    handleFolderSelect
+    handleFolderSelect,
+    skipExisting
   }
 }
