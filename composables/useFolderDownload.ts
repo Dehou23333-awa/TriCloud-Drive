@@ -6,7 +6,7 @@ import { createZipSink } from '~/utils/zipper'
 import { formatFileSize } from '~/utils/format'
 import type { FolderRecord } from '~/types/file-browser'
 
-export function useFolderDownload(options?: { targetUserId?: Ref<number | null> }) {
+export function useFolderDownload(options?: { targetUserId?: Ref<number | null | undefined> }) {
   const tRef = options?.targetUserId
   const downloadingFolderId = ref<number | null>(null)
 

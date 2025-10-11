@@ -10,7 +10,7 @@ export function useDnDUpload(
   uploadMultipleFiles: UploadMultipleFiles,
   fetchFiles: () => Promise<void>,
   clearSelection: () => void,
-  options?: { targetUserId?: Ref<number | null> }
+  options?: { targetUserId?: Ref<number | null | undefined> }
 ) {
   const tRef = options?.targetUserId
   const isDragging = ref(false)

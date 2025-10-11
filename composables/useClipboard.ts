@@ -28,7 +28,7 @@ export function useClipboard(
     fetchFiles,
     clearSelection
   }: Params,
-  options?: { targetUserId?: Ref<number | null> }
+  options?: { targetUserId?: Ref<number | null | undefined>, overwriteExisting?: Ref<boolean | null | undefined>, skipExisting?: Ref<boolean | null | undefined>}
 ) {
   const tRef = options?.targetUserId
 

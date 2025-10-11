@@ -1,7 +1,7 @@
 import { FilesService } from '~/services/files.service'
 import type { FolderRecord, FileRecord } from '~/types/files'
 
-export function useFileBrowser(options?: { targetUserId?: Ref<number | null> }) {
+export function useFileBrowser(options?: { targetUserId?: Ref<number | null | undefined> }) {
   const tRef = options?.targetUserId
 
   const folders = ref<FolderRecord[]>([])

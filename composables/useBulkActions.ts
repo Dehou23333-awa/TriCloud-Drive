@@ -12,7 +12,7 @@ export function useBulkActions(
   files: Ref<FileRecord[]>,
   selectedFolderIds: Ref<Set<number>>,
   selectedFileIds: Ref<Set<number>>,
-  options?: { targetUserId?: Ref<number | null> }
+  options?: { targetUserId?: Ref<number | null | undefined> }
 ) {
   const tRef = options?.targetUserId
   const bulkDeleting = ref(false)

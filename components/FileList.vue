@@ -332,15 +332,6 @@ const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileU
 /* 上传悬浮菜单 */
 const { showUploadMenu, uploadMenuRef, openUploadMenu, scheduleCloseUploadMenu, toggleUploadMenu } = useUploadMenu()
 
-/* 剪贴板（剪贴/复制/粘贴） */
-const {
-  clipboard, pasting, hasClipboard, clipboardCount,
-  clipboardActionLabel, pasteBtnText,
-  clipSelection, copySelection, clipFolder, copyFolder, clipFile, copyFile, pasteClipboard
-} = useClipboard(
-  { selectedFolderIds, selectedFileIds, selectedCount, currentFolderId, fetchFiles, clearSelection },
-  { targetUserId: targetUserIdRef }
-)
 
 /* 新建/重命名 */
 const { createFolder, renameFolder, renameFile } = useNameEditing(
@@ -358,6 +349,16 @@ const {
   handleDrop, handleFileSelect, handleFolderSelect,
   skipExisting
 } = useDnDUpload(currentFolderId, uploadMultipleFiles, fetchFiles, clearSelection, { targetUserId: targetUserIdRef })
+
+/* 剪贴板（剪贴/复制/粘贴） */
+const {
+  clipboard, pasting, hasClipboard, clipboardCount,
+  clipboardActionLabel, pasteBtnText,
+  clipSelection, copySelection, clipFolder, copyFolder, clipFile, copyFile, pasteClipboard
+} = useClipboard(
+  { selectedFolderIds, selectedFileIds, selectedCount, currentFolderId, fetchFiles, clearSelection },
+  { targetUserId: targetUserIdRef, overwriteExisting, skipExisting}
+)
 
 /* 保持选择状态与列表同步 */
 watch([folders, files], () => reconcileSelection())
