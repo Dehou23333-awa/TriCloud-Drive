@@ -93,8 +93,8 @@ export function useClipboard(
       const t = tRef?.value ?? null
 
       const res = c.mode === 'cut'
-        ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds, t)
-        : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds, t)
+        ? await MoveService.paste(targetFolderId, c.folderIds, c.fileIds, t, options?.overwriteExisting?.value, options?.skipExisting?.value)
+        : await CopyService.paste(targetFolderId, c.folderIds, c.fileIds, t, options?.overwriteExisting?.value, options?.skipExisting?.value)
 
       if (!res?.success) {
         notify(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'), 'error')

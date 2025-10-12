@@ -26,7 +26,11 @@ export default defineEventHandler(async (event) => {
     targetFolderId: number | null
     folderIds?: number[]
     fileIds?: number[]
+    overwrite?: boolean | null
+    skipIfExist?: boolean | null
   }>(event)
+
+  if (body.overwrite && body.skipIfExist) throw createError({ statusCode: 400, message: '不能既覆盖又跳过'})
 
   const targetFolderId = (body?.targetFolderId ?? null) as number | null
   const folderIds = uniqPositiveInts(body?.folderIds || [])
@@ -101,6 +105,29 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
+/*
+  for (var folderId of folderIds)
+  {
+    const rows: any = await db
+      .prepare(`
+        WITH RECURSIVE cte(id) AS (
+          SELECT id FROM folders WHERE id = ? AND user_id = ?
+          UNION ALL
+          SELECT f.id FROM folders f
+          JOIN cte ON f.parent_id = cte.id
+          WHERE f.user_id = ?
+        )
+        SELECT id FROM cte
+      `)
+      .bind(Number(folderId), userId, userId)
+      .all()
+
+    const ids: number[] = (rows?.results || []).map((r: any) => Number(r.id)).filter((x: any) => Number.isInteger(x))
+    if (ids.length === 0) {
+      // 理论上不会发生：至少包含自身
+      return { success: true, message: '无需删除' }
+    }
+  }*/
 
   // 重名冲突校验
   // 1) 同批次内重复名（文件夹）
