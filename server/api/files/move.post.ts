@@ -105,29 +105,65 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
-/*
+
+  var allFileIds: number[] = fileIds
+
+async function getFilePathsWithJSON(db: any, folderId: number, userId: number): Promise<Record<number, string[]>> {
+  const rows = await db
+    .prepare(`
+      WITH RECURSIVE folder_tree AS (
+        -- 基础情况：从指定文件夹开始
+        SELECT 
+          id, 
+          name, 
+          parent_id,
+          json_array(name) as path_json,
+          0 as depth
+        FROM folders 
+        WHERE id = ? AND user_id = ?
+        
+        UNION ALL
+        
+        -- 递归情况：手动构建 JSON 数组
+        SELECT 
+          f.id, 
+          f.name, 
+          f.parent_id,
+          json_set(ft.path_json, '$[' || json_array_length(ft.path_json) || ']', f.name),
+          ft.depth + 1
+        FROM folders f
+        JOIN folder_tree ft ON f.parent_id = ft.id
+        WHERE f.user_id = ?
+      )
+      SELECT 
+        fl.id as file_id,
+        ft.path_json as path_json
+      FROM files fl
+      JOIN folder_tree ft ON fl.folder_id = ft.id
+      WHERE fl.user_id = ?
+    `)
+    .bind(Number(folderId), userId, userId, userId)
+    .all();
+
+  const files: Record<number, string[]> = {};
+  
+  for (const row of rows) {
+    files[row.file_id] = JSON.parse(row.path_json);
+  }
+  
+  return files;
+}
+
   for (var folderId of folderIds)
   {
-    const rows: any = await db
-      .prepare(`
-        WITH RECURSIVE cte(id) AS (
-          SELECT id FROM folders WHERE id = ? AND user_id = ?
-          UNION ALL
-          SELECT f.id FROM folders f
-          JOIN cte ON f.parent_id = cte.id
-          WHERE f.user_id = ?
-        )
-        SELECT id FROM cte
-      `)
-      .bind(Number(folderId), userId, userId)
-      .all()
+    const files = await getFilePathsWithJSON(db, folderId, userId)
+    console.log(files)
+    console.log('\n\n\n')
+  }
+  return { success: false, message: '移动失败，服务暂时不可用' }
 
-    const ids: number[] = (rows?.results || []).map((r: any) => Number(r.id)).filter((x: any) => Number.isInteger(x))
-    if (ids.length === 0) {
-      // 理论上不会发生：至少包含自身
-      return { success: true, message: '无需删除' }
-    }
-  }*/
+  for (var file of allFileIds)
+  {}
 
   // 重名冲突校验
   // 1) 同批次内重复名（文件夹）
