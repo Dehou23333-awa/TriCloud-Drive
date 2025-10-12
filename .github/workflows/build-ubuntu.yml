@@ -1,0 +1,76 @@
+name: Build - Nuxt 3 (Ubuntu artifact)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.16.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (Nuxt SSR/Nitro)
+        env:
+          NODE_ENV: production
+          NUXT_TELEMETRY_DISABLED: 1
+        run: npm run build
+
+      - name: Debug workspace and .output
+        run: |
+          echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
+          ls -la
+          if [ -d ".output" ]; then
+            echo ".output exists, sample files:"
+            find .output -type f | head -20
+          else
+            echo ".output NOT FOUND"
+          fi
+
+      - name: Add Linux start script
+        run: |
+          if [ ! -d ".output" ]; then
+            echo "Error: .output directory not found"
+            exit 1
+          fi
+          
+          cat > .output/start.sh << 'EOF'
+          #!/bin/bash
+          export PORT=${PORT:-3000}
+          export NITRO_HOST=${NITRO_HOST:-0.0.0.0}
+          DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+          node "$DIR/server/index.mjs"
+          EOF
+          
+          chmod +x .output/start.sh
+
+      - name: Zip .output
+        run: |
+          if [ ! -d ".output" ]; then
+            echo "Error: .output directory not found before zip"
+            exit 1
+          fi
+          zip -r nuxt-output-ubuntu-node22.zip .output/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-output-ubuntu-node22
+          path: ${{ github.workspace }}/nuxt-output-ubuntu-node22.zip
+          if-no-files-found: error
+          retention-days: 7
