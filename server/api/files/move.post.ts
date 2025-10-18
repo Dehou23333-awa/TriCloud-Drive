@@ -106,64 +106,84 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  var allFileIds: number[] = fileIds
+  // 0) 把 allFileIds 从数组改成“id -> 路径数组”映射，并用 fileIds 初始化为 { id: [] }
+  let allFileIds: Record<number, string[]> =
+    Object.fromEntries((fileIds ?? []).map((id: number) => [Number(id), [] as string[]]));
 
-async function getFilePathsWithJSON(db: any, folderId: number, userId: number): Promise<Record<number, string[]>> {
-  const rows = await db
-    .prepare(`
-      WITH RECURSIVE folder_tree AS (
-        -- 基础情况：从指定文件夹开始
-        SELECT 
-          id, 
-          name, 
-          parent_id,
-          json_array(name) as path_json,
-          0 as depth
-        FROM folders 
-        WHERE id = ? AND user_id = ?
-        
-        UNION ALL
-        
-        -- 递归情况：手动构建 JSON 数组
-        SELECT 
-          f.id, 
-          f.name, 
-          f.parent_id,
-          json_set(ft.path_json, '$[' || json_array_length(ft.path_json) || ']', f.name),
-          ft.depth + 1
-        FROM folders f
-        JOIN folder_tree ft ON f.parent_id = ft.id
-        WHERE f.user_id = ?
-      )
-      SELECT 
-        fl.id as file_id,
-        ft.path_json as path_json
-      FROM files fl
-      JOIN folder_tree ft ON fl.folder_id = ft.id
-      WHERE fl.user_id = ?
-    `)
-    .bind(Number(folderId), userId, userId, userId)
-    .all();
+  for (const folderId of folderIds) {
+    const sql = `
+WITH RECURSIVE
+  subtree(id, parent_id, name) AS (
+    SELECT id, parent_id, name
+    FROM folders
+    WHERE id = ? AND user_id = ?
+    UNION ALL
+    SELECT f.id, f.parent_id, f.name
+    FROM folders f
+    JOIN subtree s ON f.parent_id = s.id
+    WHERE f.user_id = ?
+  ),
+  paths(id, path_json) AS (
+    SELECT id, json_array(name)
+    FROM subtree
+    WHERE id = ?
+    UNION ALL
+    SELECT f.id,
+          json_insert(p.path_json,
+                      '$[' || json_array_length(p.path_json) || ']',
+                      f.name)
+    FROM subtree f
+    JOIN paths p ON f.parent_id = p.id
+  )
+SELECT COALESCE(
+  json_group_object(CAST(fi.id AS TEXT), json(p.path_json)),
+  '{}'
+) AS files
+FROM files fi
+JOIN paths p ON fi.folder_id = p.id
+WHERE fi.user_id = ?;`;
 
-  const files: Record<number, string[]> = {};
-  
-  for (const row of rows) {
-    files[row.file_id] = JSON.parse(row.path_json);
+    const row = await db.prepare(sql).bind(
+      Number(folderId), // 1) subtree 根 id
+      userId,           // 2) 同用户过滤(锚点)
+      userId,           // 3) 同用户过滤(递归)
+      Number(folderId), // 4) paths 锚点
+      userId            // 5) files 同用户过滤
+    ).first();
+
+    // 1) 解析查询结果
+    const filesObj = row?.files ? (JSON.parse(row.files) as Record<string, string[]>) : {};
+
+    // 2) 合并到 allFileIds
+    for (const [idStr, pathArr] of Object.entries(filesObj)) {
+      const id = Number(idStr);
+      // 如不想覆盖已有（比如来自 fileIds 的空数组），用以下写法：
+      // if (!(id in allFileIds)) allFileIds[id] = pathArr;
+      allFileIds[id] = pathArr;
+    }
+
+    // 调试查看
+    console.log('current batch:', filesObj);
+    console.log('\n\n\n');
   }
-  
-  return files;
-}
 
-  for (var folderId of folderIds)
-  {
-    const files = await getFilePathsWithJSON(db, folderId, userId)
-    console.log(files)
-    console.log('\n\n\n')
+  // 结果：allFileIds = { 12: ["root","child"], 18: ["root","child","subchild"], ... 123: [] /* 来自 fileIds */ }
+  console.log('allFileIds:', allFileIds);
+
+  // 如需取纯 ID 数组：
+  //const allIds = Object.keys(allFileIds).map(Number);
+  for (const [idStr, segments] of Object.entries(allFileIds)) {
+    const id = Number(idStr);      // 对象键在运行时是字符串，转回 number 更稳
+    // 如果需要字符串形式的路径：
+    const pathStr = segments.join('/'); // 例如 "root/child/sub"
+    console.log('id:', id, 'segments:', segments, 'path:', pathStr);
+
+    // 如果你想跳过那些来自 fileIds 的空路径：
+    // if (segments.length === 0) continue;
   }
   return { success: false, message: '移动失败，服务暂时不可用' }
 
-  for (var file of allFileIds)
-  {}
+  
 
   // 重名冲突校验
   // 1) 同批次内重复名（文件夹）
