@@ -2,6 +2,7 @@ import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import crypto from 'crypto'
 import { UserService } from '~/server/utils/db'
+import tencentcloud from 'tencentcloud-sdk-nodejs'
 
 export default defineEventHandler(async (event) => {
   // 处理 CORS 预检
@@ -152,9 +153,7 @@ export default defineEventHandler(async (event) => {
     const fileKey = `users/${user.id}/${year}${month}/${safeFilename}`
 
     // 检查 COS 密钥
-    if (!config.tencentSecretId || !config.tencentSecretKey ||
-        config.tencentSecretId === 'your_secret_id_here' ||
-        config.tencentSecretKey === 'your_secret_key_here') {
+    if (!config.tencentSecretId || !config.tencentSecretKey ) {
       return {
         statusCode: 500,
         body: JSON.stringify({ success: false, message: '腾讯云密钥未配置' })
@@ -162,8 +161,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // 生成 STS 临时密钥
-    const { Client } = await import('tencentcloud-sdk-nodejs/tencentcloud/services/sts/v20180813/sts_client')
-    const client = new Client({
+    const StsClient = tencentcloud.sts.v20180813.Client
+    const client = new StsClient({
       credential: { secretId: config.tencentSecretId, secretKey: config.tencentSecretKey },
       region: config.cosRegion,
     })

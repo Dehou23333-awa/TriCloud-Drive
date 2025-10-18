@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
     // 设置 HttpOnly cookie
     setCookie(event, 'auth-token', token, {
       httpOnly: true,
-      secure: true,
+      secure: !!config.https,
       sameSite: 'strict',
       maxAge: 60 * 60 * 24 * 7 // 7 days
     })

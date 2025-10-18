@@ -44,6 +44,7 @@ export default defineNuxtConfig({
     cdnAuthTtl: parseInt(process.env.CDN_AUTH_TTL || '10'), // 默认10秒
     cdnAuthParam: process.env.CDN_AUTH_PARAM || 'sign',
     dbPath: process.env.SQLITE_PATH || './data.sqlite',
+    https: process.env.HTTPS === 'true',
     public: {
       apiBase: '',
       allowRegister: process.env.ALLOW_REGISTER === 'true'
