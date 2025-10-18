@@ -12,7 +12,7 @@
 - ✅ 腾讯云存储桶+CDN 云存储
 - ✅ 用户下载和存储配额
 - 🚧 管理（开发中）
-- 🚧 文件上传下载（开发中）
+- ✅ 文件上传下载
 
 ## 技术栈
 
@@ -51,6 +51,8 @@ npx wrangler d1 execute tricloud-drive --local --file=server/database/schema.sql
 cp env.example .env
 ```
 
+> ⚠ 在一些服务器上，.env的文件如果是CRLF的格式会出现问题，如果有问题，请改为LF格式。
+
 **或对于Windows用户**
 
 ```batch
@@ -66,6 +68,59 @@ npm run dev
 ```
 
 应用将在 http://localhost:3000 启动。
+
+## 部署
+
+### 1、从github workflows下载编译过的文件。
+
+https://github.com/Dehou23333-awa/TriCloud-Drive/actions
+
+目前支持ubuntu24和windows。点击想要的版本后在主页的artifacts可以看到编译好的文件（没有就是过期了）。
+
+### 2、安装nodejs
+
+> 建议安装node v22.20.0 , 我们的编译统一使用这个版本
+
+```
+node -v
+```
+
+### 3. 初始化数据库
+
+- Sqlite3 数据库初始化
+
+```bash
+sqlite3 data.sqlite < ./server/database/schema.sql
+```
+
+### 4. 配置环境变量
+
+```bash
+cp env.example .env
+```
+
+> ⚠ 在一些服务器上，.env的文件如果是CRLF的格式会出现问题，如果有问题，请改为LF格式。
+
+**或对于Windows用户**
+
+```batch
+copy env.example .env
+```
+
+### 5、启动服务器
+
+> 解压缩以后会有一个.output的文件夹
+
+```
+cd .output
+./start.sh
+```
+
+**或者 使用PM2**
+
+```
+pm2 start ./start.sh --name "Tricloud-drive"
+```
 
 ## 用户认证功能
 
@@ -102,76 +157,6 @@ npm run dev
 
 > 用户注册时 `IsAdmin` 和 `IsSuperAdmin` 默认为 `false` 。管理员请手动修改数据库。之后就可以在管理页面修改其他用户权限。
 
-
-## API 端点
-
-### 认证 API
-
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/logout` - 用户退出
-- `GET /api/auth/me` - 获取当前用户信息
-- `GET /api/auth/isAdminOrSuperAdmin` - 检查当前用户是否为管理员或超级管理员
-
-### 请求格式
-
-#### 注册
-```json
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-```
-
-#### 登录
-```json
-{
-  "email": "user@example.com", 
-  "password": "password123"
-}
-```
-
-### 响应格式
-
-#### 成功响应
-```json
-{
-  "success": true,
-  "message": "操作成功",
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "created_at": "2025-08-15T12:00:00.000Z"
-  }
-}
-```
-
-#### 错误响应
-```json
-{
-  "statusCode": 400,
-  "statusMessage": "错误信息"
-}
-```
-
-## 数据库结构
-
-### users 表
-
-```sql
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  IsAdmin BOOLEAN DEFAULT 0,
-  IsSuperAdmin BOOLEAN DEFAULT 0,
-  usedStorage INTEGER DEFAULT 0,
-  maxStorage INTEGER DEFAULT 1,
-  usedDownload INTEGER DEFAULT 0,
-  maxDownload INTEGER DEFAULT 1
-);
-```
 
 ## 部署到 Cloudflare(待完善)
 
