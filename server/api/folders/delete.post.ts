@@ -62,10 +62,7 @@ export default defineEventHandler(async (event) => {
 
     if (
       filesToDelete.length > 0 &&
-      config.tencentSecretId &&
-      config.tencentSecretKey &&
-      config.tencentSecretId !== 'your_secret_id_here' &&
-      config.tencentSecretKey !== 'your_secret_key_here'
+      config.tencentSecretId
     ) {
       cosAttempted = true
       try {

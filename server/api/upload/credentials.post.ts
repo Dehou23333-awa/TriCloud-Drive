@@ -2,7 +2,6 @@ import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import crypto from 'crypto'
 import { UserService } from '~/server/utils/db'
-import tencentcloud from 'tencentcloud-sdk-nodejs'
 
 export default defineEventHandler(async (event) => {
   // 处理 CORS 预检
@@ -161,10 +160,11 @@ export default defineEventHandler(async (event) => {
     }
 
     // 生成 STS 临时密钥
-    const StsClient = tencentcloud.sts.v20180813.Client
-    const client = new StsClient({
-      credential: { secretId: config.tencentSecretId, secretKey: config.tencentSecretKey },
-      region: config.cosRegion,
+    const mod = await import('tencentcloud-sdk-nodejs/tencentcloud/services/sts/v20180813/sts_client.js')
+    const Client = (mod.default?.Client) || mod.Client
+    const client = new Client({
+    credential: { secretId: config.tencentSecretId, secretKey: config.tencentSecretKey },
+    region: config.cosRegion,
     })
 
     const appId = config.cosBucket.substr(config.cosBucket.lastIndexOf('-') + 1)
