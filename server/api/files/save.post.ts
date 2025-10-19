@@ -143,7 +143,7 @@ export default defineEventHandler(async (event) => {
         fileKey,
         fileSize: size,
         fileUrl,
-        contentType: contentType || 'application/octet-stream',
+        contentType: contentType || null,
         createdAt: nowSqlString(), // 覆盖时也希望更新为当前时间
       }
 
@@ -156,20 +156,21 @@ export default defineEventHandler(async (event) => {
       }
 
       // 读取落库后的文件（按 file_key 回查；如果你的表对 file_key 唯一，这里更安全）
+      /*
       let fileRow: any = null
       try {
         fileRow = await db
           .prepare('SELECT * FROM files WHERE user_id = ? AND file_key = ? ORDER BY id DESC LIMIT 1')
           .bind(userId, fileKey)
           .first()
-      } catch {}
+      } catch {}*/
 
       await db.prepare('RELEASE upload_tx').bind().run()
 
       if (overwrite && existedRow?.id) {
-        return { success: true, message: '文件覆盖成功', file: fileRow || null }
+        return { success: true, message: '文件覆盖成功'/*, file: fileRow || null*/ }
       }
-      return { success: true, message: '文件记录保存成功', file: fileRow || null }
+      return { success: true, message: '文件记录保存成功'/*, file: fileRow || null*/ }
     } catch (txErr) {
       try {
         await db.prepare('ROLLBACK TO upload_tx').bind().run()
