@@ -35,6 +35,11 @@ export interface ApiError {
   statusMessage: string
 }
 
+export interface GeneralResponse{
+  success: boolean
+  message?: string | null | undefined
+}
+
 declare global {
   interface CloudflareEnv {
     DB: any

@@ -1,5 +1,7 @@
 import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
+import { resolveUniqueFilename } from '~/server/utils/file'
+import { userExpiredError, userNotFindError, dbConnectionError, folderNotFindError, upload403Error } from '~/types/error'
 
 export default defineEventHandler(async (event) => {
   function parseSqlDateTime(input: any): Date | null {
@@ -50,54 +52,7 @@ export default defineEventHandler(async (event) => {
     return n
   }
 
-  function splitName(filename: string): { base: string, ext: string } {
-    const i = filename.lastIndexOf('.')
-    if (i <= 0) return { base: filename, ext: '' }
-    return { base: filename.slice(0, i), ext: filename.slice(i) }
-  }
-
-  function escapeLike(input: string): string {
-    return input.replace(/([%_\\])/g, '\\$1')
-  }
-
-  function escapeRegExp(input: string): string {
-    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  }
-
-  async function resolveUniqueFilename(db: any, userId: number, folderId: number | null, desired: string): Promise<{ name: string, base: string, ext: string, nextN: number }> {
-    const { base, ext } = splitName(desired)
-    const likePattern = `${escapeLike(base)} (%)${escapeLike(ext)}`
-    let rows
-    if (folderId === null) {
-      rows = await db.prepare(`
-        SELECT filename FROM files
-        WHERE user_id = ? AND folder_id IS NULL
-          AND (filename = ? OR filename LIKE ? ESCAPE '\\')
-      `).bind(userId, desired, likePattern).all()
-    } else {
-      rows = await db.prepare(`
-        SELECT filename FROM files
-        WHERE user_id = ? AND folder_id = ?
-          AND (filename = ? OR filename LIKE ? ESCAPE '\\')
-      `).bind(userId, folderId, desired, likePattern).all()
-    }
-    const existing = new Set<string>((rows?.results || []).map((r: any) => String(r.filename)))
-    if (!existing.has(desired)) {
-      return { name: desired, base, ext, nextN: 1 }
-    }
-    // 找到现有最大 (n)
-    const re = new RegExp(`^${escapeRegExp(base)} \\((\\d+)\\)${escapeRegExp(ext)}$`)
-    let maxN = 1
-    for (const name of existing) {
-      const m = name.match(re)
-      if (m) {
-        const n = parseInt(m[1], 10)
-        if (Number.isFinite(n) && n > maxN) maxN = n
-      }
-    }
-    const nextN = maxN + 1
-    return { name: `${base} (${nextN})${ext}`, base, ext, nextN }
-  }
+  
 
   function buildName(base: string, ext: string, n: number): string {
     return n <= 1 ? `${base}${ext}` : `${base} (${n})${ext}`
@@ -117,14 +72,14 @@ export default defineEventHandler(async (event) => {
     if (!Number.isFinite(size) || size < 0) throw createError({ statusCode: 400, statusMessage: 'fileSize 参数无效' })
 
     const db = getDb(event)
-    if (!db) throw createError({ statusCode: 500, statusMessage: '数据库连接失败' })
+    if (!db) throw dbConnectionError
 
     const userRow: any = await db.prepare('SELECT expire_at FROM users WHERE id = ?').bind(userId).first()
-    if (!userRow) throw createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
-    if (isExpired(userRow.expire_at)) throw createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
+    if (!userRow) throw userNotFindError
+    if (isExpired(userRow.expire_at)) throw userExpiredError
     if (folderId !== null) {
       const chk = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?').bind(folderId, userId).first()
-      if (!chk) throw createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
+      if (!chk) throw folderNotFindError
     }
 
     await db.prepare('SAVEPOINT upload_tx').bind().run()
@@ -154,7 +109,7 @@ export default defineEventHandler(async (event) => {
           if (changes !== 1) {
             await db.prepare('ROLLBACK TO upload_tx').bind().run()
             await db.prepare('RELEASE upload_tx').bind().run()
-            throw createError({ statusCode: 403, statusMessage: '存储空间不足或账号已过期，禁止上传' })
+            throw upload403Error
           }
 
           await db.prepare(`
@@ -182,7 +137,7 @@ export default defineEventHandler(async (event) => {
       if (changes !== 1) {
         await db.prepare('ROLLBACK TO upload_tx').bind().run()
         await db.prepare('RELEASE upload_tx').bind().run()
-        throw createError({ statusCode: 403, statusMessage: '存储空间不足或账号已过期，禁止上传' })
+        throw upload403Error
       }
 
       let file: any | null = null

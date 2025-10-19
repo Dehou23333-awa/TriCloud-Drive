@@ -2,6 +2,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { ensurePaths } from '~/server/utils/folders'
+import { skipAndOverwriteError } from '~/types/error'
 
 function placeholders(n: number) {
   return Array(n).fill('?').join(',')
@@ -31,7 +32,7 @@ export default defineEventHandler(async (event) => {
     skipIfExist?: boolean | null
   }>(event)
 
-  if (body.overwrite && body.skipIfExist) throw createError({ statusCode: 400, message: '不能既覆盖又跳过'})
+  if (body.overwrite && body.skipIfExist) throw skipAndOverwriteError
 
   const targetFolderId = (body?.targetFolderId ?? null) as number | null
   const folderIds = uniqPositiveInts(body?.folderIds || [])
@@ -176,12 +177,13 @@ WHERE fi.user_id = ?;`;
   for (const [idStr, segments] of Object.entries(allFileIds)) {
     const id = Number(idStr);      // 对象键在运行时是字符串，转回 number 更稳
     // 如果需要字符串形式的路径：
-    //const pathStr = segments.join('/'); // 例如 "root/child/sub"
+    const pathStr = segments.join('/'); // 例如 "root/child/sub"
     console.log('id:', id, 'segments:', segments);
     const map = await ensurePaths(db, userId, {
       parentId: targetFolderId,
-      paths: segments,
+      paths: pathStr,
     })
+    console.log(map[pathStr],"\n")
 
     // 如果你想跳过那些来自 fileIds 的空路径：
     // if (segments.length === 0) continue;

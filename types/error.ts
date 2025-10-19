@@ -1,0 +1,7 @@
+export const skipAndOverwriteError = createError({ statusCode: 400, message: '不能既覆盖又跳过'})
+export const ServerError = createError({ statusCode: 500 })
+export const dbConnectionError = createError({ statusCode: 500, statusMessage: '数据库连接失败' })
+export const userNotFindError = createError({ statusCode: 404, statusMessage: '用户不存在或已被删除' })
+export const userExpiredError = createError({ statusCode: 403, statusMessage: '账号已过期，禁止上传' })
+export const folderNotFindError = createError({ statusCode: 404, statusMessage: '文件夹不存在或无权限' })
+export const upload403Error = createError({ statusCode: 403, statusMessage: '存储空间不足或账号已过期，禁止上传' })

@@ -1,6 +1,7 @@
 // server/utils/folders.ts
 import { createError } from 'h3'
-
+import { Database } from '~/server/utils/db'
+/*
 type DBLike = {
   prepare: (sql: string) => {
     bind: (...args: any[]) => any
@@ -8,7 +9,7 @@ type DBLike = {
     run: () => Promise<any>
   }
 }
-
+*/
 export function normalizeFolderId(input: any): number | null {
   if (input === undefined || input === null || input === '' || input === 'root' || input === '0' || input === 0) {
     return null
@@ -39,7 +40,7 @@ function getLastInsertId(meta?: any): number | undefined {
   return meta?.lastID ?? meta?.insertId ?? meta?.last_row_id
 }
 
-async function assertParent(db: DBLike, userId: number, parentId: number | null) {
+async function assertParent(db: Database, userId: number, parentId: number | null) {
   if (parentId === null) return
   const p = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND user_id = ?')
     .bind(parentId, userId)
@@ -52,7 +53,7 @@ async function assertParent(db: DBLike, userId: number, parentId: number | null)
  * 保持与原 create.post.ts 相同的校验与返回
  */
 export async function createFolder(
-  db: DBLike,
+  db: Database,
   userId: number,
   params: { name?: any; parentId?: any }
 ) {
@@ -114,7 +115,7 @@ export async function createFolder(
  * 与原 ensure-paths.post.ts 保持行为一致（包含 SAVEPOINT 事务）
  */
 export async function ensurePaths(
-  db: DBLike,
+  db: Database,
   userId: number,
   params: { parentId?: any; paths?: any }
 ): Promise<Record<string, number>> {
