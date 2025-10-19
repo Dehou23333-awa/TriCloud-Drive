@@ -103,7 +103,7 @@ export async function save(db: Database, file: FileRecord, userId: number, folde
             file_size    = excluded.file_size,
             file_url     = excluded.file_url,
             content_type = excluded.content_type,
-            created_at   = excluded.create_at;
+            created_at   = excluded.created_at;
         `
         const params = [
             Number(userId),
@@ -115,12 +115,13 @@ export async function save(db: Database, file: FileRecord, userId: number, folde
             file.contentType || null,
             file.createdAt,
         ]
+        await db.prepare(sql).bind(...params).first()
         return { success: true }
     } else if (skipIfExist)
     {
         const stmt = db.prepare(`
         INSERT OR IGNORE INTO files (
-            user_id, folder_id, filename, file_key, file_size, file_url, content_type,created_at
+            user_id, folder_id, filename, file_key, file_size, file_url, content_type, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `)
         const params = [
@@ -156,7 +157,9 @@ export async function getFileById(db: Database, fileId: number): Promise<FileRec
         file_size    AS fileSize,
         file_url     AS fileUrl,
         content_type AS contentType,
-        created_at   AS createdAt
+        created_at   AS createdAt,
+        user_id
+        folder_id
       FROM files
       WHERE id = ?
     `)
@@ -180,7 +183,9 @@ export async function getFileById(db: Database, fileId: number): Promise<FileRec
         fileSize,
         fileUrl: String(row.fileUrl),
         contentType: row.contentType ? String(row.contentType) : '',
-        createdAt: String(row.createdAt)
+        createdAt: String(row.createdAt),
+        user_id: Number(row.user_id),
+        folder_id: Number(row.folder_id)
     }
 
     return record
