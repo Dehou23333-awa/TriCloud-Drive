@@ -15,7 +15,6 @@ export interface FileRecord {
   contentType: string
   createdAt: string
   user_id: number
-  folder_id: number
 }
 
 export interface FolderManifest {

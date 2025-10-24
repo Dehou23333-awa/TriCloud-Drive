@@ -3,6 +3,11 @@ import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { ensurePaths } from '~/server/utils/folders'
 import { skipAndOverwriteError } from '~/types/error'
+import {
+  resolveUniqueFilename,
+  delEmptySubfolder,
+  recalculateUsedStorage,
+} from '~/server/utils/file'
 
 function placeholders(n: number) {
   return Array(n).fill('?').join(',')
@@ -14,14 +19,10 @@ function uniqPositiveInts(arr: any[]): number[] {
       .filter(n => Number.isInteger(n) && n > 0)
   )]
 }
-function hasDuplicates(list: string[]) {
-  return new Set(list).size !== list.length
-}
 
 export default defineEventHandler(async (event) => {
-  //const user = await requireAuth(event)
   const { targetUserId } = await getMeAndTarget(event)
-  const userId = Number( targetUserId )
+  const userId = Number(targetUserId)
   const db = getDb(event)
 
   const body = await readBody<{
@@ -39,7 +40,7 @@ export default defineEventHandler(async (event) => {
   const fileIds = uniqPositiveInts(body?.fileIds || [])
 
   if (!folderIds.length && !fileIds.length) {
-    return { success: true, moved: { folders: 0, files: 0 }, message: '无移动项' }
+    return { success: true, moved: { folders: 0, files: 0 }, skipped: 0, failed: 0, message: '无移动项' }
   }
 
   // 校验目标文件夹
@@ -53,12 +54,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 拉取待移动文件夹/文件
+  // 拉取待移动文件夹/文件（基本信息）
   const movedFolders = folderIds.length
     ? (await db
-        .prepare(`SELECT id, name, parent_id FROM folders WHERE user_id = ? AND id IN (${placeholders(folderIds.length)})`)
-        .bind(userId, ...folderIds)
-        .all()).results as any[]
+      .prepare(`SELECT id, name, parent_id FROM folders WHERE user_id = ? AND id IN (${placeholders(folderIds.length)})`)
+      .bind(userId, ...folderIds)
+      .all()).results as any[]
     : []
 
   if (movedFolders.length !== folderIds.length) {
@@ -67,16 +68,16 @@ export default defineEventHandler(async (event) => {
 
   const movedFiles = fileIds.length
     ? (await db
-        .prepare(`SELECT id, filename, folder_id FROM files WHERE user_id = ? AND id IN (${placeholders(fileIds.length)})`)
-        .bind(userId, ...fileIds)
-        .all()).results as any[]
+      .prepare(`SELECT id, filename, folder_id AS folderId FROM files WHERE user_id = ? AND id IN (${placeholders(fileIds.length)})`)
+      .bind(userId, ...fileIds)
+      .all()).results as any[]
     : []
 
   if (movedFiles.length !== fileIds.length) {
     return { success: false, message: '部分文件不存在或无权限' }
   }
 
-  // 防止把文件夹移动到其自身或其子孙中
+  // 工具：取父级 id
   const getParentId = async (fid: number): Promise<number | null> => {
     const row: any = await db
       .prepare('SELECT parent_id FROM folders WHERE user_id = ? AND id = ?')
@@ -84,6 +85,8 @@ export default defineEventHandler(async (event) => {
       .first()
     return row?.parent_id ?? null
   }
+
+  // 防止把文件夹移动到其自身或其子孙中（重要：杜绝将自己移动到自己的子目录）
   const isTargetInsideFolder = async (folderId: number, targetId: number): Promise<boolean> => {
     let cur: number | null = targetId
     const visited = new Set<number>()
@@ -108,167 +111,183 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 0) 把 allFileIds 从数组改成“id -> 路径数组”映射，并用 fileIds 初始化为 { id: [] }
-  let allFileIds: Record<number, string[]> =
-    Object.fromEntries((fileIds ?? []).map((id: number) => [Number(id), [] as string[]]));
+  // 收集 folder 子树（目录路径与文件），并生成要在目标处创建的所有相对路径
+  const CHUNK = 500
+  const pathsToEnsure = new Set<string>() // e.g. "A", "A/B", "A/B/C"
+  const relPathByFolderId = new Map<number, string>() // folderId -> "A/B"
+  const filesFromFolders: { id: number, filename: string, folderId: number }[] = []
+  const filesFromFoldersSet = new Set<number>()
 
-  for (const folderId of folderIds) {
-    const sql = `
-WITH RECURSIVE
-  subtree(id, parent_id, name) AS (
-    SELECT id, parent_id, name
-    FROM folders
-    WHERE id = ? AND user_id = ?
-    UNION ALL
-    SELECT f.id, f.parent_id, f.name
-    FROM folders f
-    JOIN subtree s ON f.parent_id = s.id
-    WHERE f.user_id = ?
-  ),
-  paths(id, path_json) AS (
-    SELECT id, json_array(name)
-    FROM subtree
-    WHERE id = ?
-    UNION ALL
-    SELECT f.id,
-          json_insert(p.path_json,
-                      '$[' || json_array_length(p.path_json) || ']',
-                      f.name)
-    FROM subtree f
-    JOIN paths p ON f.parent_id = p.id
-  )
-SELECT COALESCE(
-  json_group_object(CAST(fi.id AS TEXT), json(p.path_json)),
-  '{}'
-) AS files
-FROM files fi
-JOIN paths p ON fi.folder_id = p.id
-WHERE fi.user_id = ?;`;
+  async function collectSubtree(rootId: number, rootName: string) {
+    // 相对路径：root 从自己的名字开始
+    relPathByFolderId.set(rootId, rootName)
+    pathsToEnsure.add(rootName)
 
-    const row = await db.prepare(sql).bind(
-      Number(folderId), // 1) subtree 根 id
-      userId,           // 2) 同用户过滤(锚点)
-      userId,           // 3) 同用户过滤(递归)
-      Number(folderId), // 4) paths 锚点
-      userId            // 5) files 同用户过滤
-    ).first();
-
-    // 1) 解析查询结果
-    const filesObj = row?.files ? (JSON.parse(row.files) as Record<string, string[]>) : {};
-
-    // 2) 合并到 allFileIds
-    for (const [idStr, pathArr] of Object.entries(filesObj)) {
-      const id = Number(idStr);
-      // 如不想覆盖已有（比如来自 fileIds 的空数组），用以下写法：
-      // if (!(id in allFileIds)) allFileIds[id] = pathArr;
-      allFileIds[id] = pathArr;
+    const subtree = new Set<number>([rootId])
+    let frontier: number[] = [rootId]
+    while (frontier.length > 0) {
+      const ph = placeholders(frontier.length)
+      const res = await db
+        .prepare(`SELECT id, parent_id, name FROM folders WHERE user_id = ? AND parent_id IN (${ph})`)
+        .bind(userId, ...frontier)
+        .all()
+      const rows = (res?.results || []) as any[]
+      const next: number[] = []
+      for (const r of rows) {
+        const id = Number(r.id)
+        if (!subtree.has(id)) {
+          subtree.add(id)
+          const parentPath = relPathByFolderId.get(Number(r.parent_id)) || ''
+          const myPath = parentPath ? `${parentPath}/${String(r.name)}` : String(r.name)
+          relPathByFolderId.set(id, myPath)
+          pathsToEnsure.add(myPath)
+          next.push(id)
+        }
+      }
+      frontier = next
     }
 
-    // 调试查看
-    console.log('current batch:', filesObj);
-    console.log('\n\n\n');
+    // 收集该子树中的所有文件
+    const ids = Array.from(subtree)
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = ids.slice(i, i + CHUNK)
+      const ph = placeholders(batch.length)
+      const res = await db
+        .prepare(`SELECT id, filename, folder_id AS folderId FROM files WHERE user_id = ? AND folder_id IN (${ph})`)
+        .bind(userId, ...batch)
+        .all()
+      const list = (res?.results || []).map((r: any) => ({
+        id: Number(r.id),
+        filename: String(r.filename),
+        folderId: Number(r.folderId),
+      }))
+      for (const f of list) {
+        filesFromFolders.push(f)
+        filesFromFoldersSet.add(f.id)
+      }
+    }
   }
 
-  // 结果：allFileIds = { 12: ["root","child"], 18: ["root","child","subchild"], ... 123: [] /* 来自 fileIds */ }
-  console.log('allFileIds:', allFileIds);
+  for (const f of movedFolders) {
+    await collectSubtree(Number(f.id), String(f.name))
+  }
 
-  // 如需取纯 ID 数组：
-  //const allIds = Object.keys(allFileIds).map(Number);
-  for (const [idStr, segments] of Object.entries(allFileIds)) {
-    const id = Number(idStr);      // 对象键在运行时是字符串，转回 number 更稳
-    // 如果需要字符串形式的路径：
-    const pathStr = segments.join('/'); // 例如 "root/child/sub"
-    console.log('id:', id, 'segments:', segments);
-    const map = await ensurePaths(db, userId, {
-      parentId: targetFolderId,
-      paths: pathStr,
+  // 在目标位置创建/复用所有需要的目录（含空目录）
+  const destMap = await ensurePaths(db, userId, {
+    parentId: targetFolderId,
+    paths: Array.from(pathsToEnsure),
+  })
+
+  // 生成移动计划：来自“文件夹”的文件 + 额外指定的“单个文件”（排除已在子树内的）
+  type MoveItem = { id: number, filename: string, srcFolderId: number | null, destFolderId: number | null }
+  const plan: MoveItem[] = []
+
+  // 来自文件夹子树的文件
+  for (const f of filesFromFolders) {
+    const rel = relPathByFolderId.get(f.folderId) || ''
+    const destFolderId = rel ? (destMap[rel] ?? null) : targetFolderId // 理论上 rel 不会为空
+    plan.push({
+      id: f.id,
+      filename: f.filename,
+      srcFolderId: f.folderId ?? null,
+      destFolderId,
     })
-    console.log(map[pathStr],"\n")
-
-    // 如果你想跳过那些来自 fileIds 的空路径：
-    // if (segments.length === 0) continue;
-  }
-  return { success: false, message: '移动失败，服务暂时不可用' }
-
-  
-
-  // 重名冲突校验
-  // 1) 同批次内重复名（文件夹）
-  const movedFolderNames = movedFolders.map(f => String(f.name))
-  if (hasDuplicates(movedFolderNames)) {
-    return { success: false, message: '移动的文件夹中存在同名项目，无法移动（同一层级下不允许重名）' }
-  }
-  // 2) 同批次内重复名（文件）
-  const movedFileNames = movedFiles.map(f => String(f.filename))
-  if (hasDuplicates(movedFileNames)) {
-    return { success: false, message: '移动的文件中存在同名项目，无法移动（同一文件夹下不允许重名）' }
   }
 
-  // 3) 与目标文件夹现有项冲突（排除那些已经在目标里、ID 本身属于移动集合的）
-  // 文件夹名冲突
-  if (movedFolderNames.length) {
-    const existingFolderNameRows = await db
-      .prepare(
-        `SELECT name FROM folders
-         WHERE user_id = ?
-           AND COALESCE(parent_id, -1) = COALESCE(?, -1)
-           ${folderIds.length ? `AND id NOT IN (${placeholders(folderIds.length)})` : ''}
-           AND name IN (${placeholders(movedFolderNames.length)})`
-      )
-      .bind(userId, targetFolderId, ...(folderIds.length ? folderIds : []), ...movedFolderNames)
-      .all()
-    const existingNames = new Set((existingFolderNameRows.results as any[]).map(r => r.name))
-    if (existingNames.size) {
-      return { success: false, message: `目标文件夹中已存在同名文件夹：${[...existingNames].join(', ')}` }
-    }
+  // 额外选中的单个文件
+  for (const f of movedFiles) {
+    if (filesFromFoldersSet.has(Number(f.id))) continue
+    plan.push({
+      id: Number(f.id),
+      filename: String(f.filename),
+      srcFolderId: (f.folderId === undefined || f.folderId === null) ? null : Number(f.folderId),
+      destFolderId: targetFolderId,
+    })
   }
 
-  // 文件名冲突
-  if (movedFileNames.length) {
-    const existingFileNameRows = await db
-      .prepare(
-        `SELECT filename FROM files
-         WHERE user_id = ?
-           AND COALESCE(folder_id, -1) = COALESCE(?, -1)
-           ${fileIds.length ? `AND id NOT IN (${placeholders(fileIds.length)})` : ''}
-           AND filename IN (${placeholders(movedFileNames.length)})`
-      )
-      .bind(userId, targetFolderId, ...(fileIds.length ? fileIds : []), ...movedFileNames)
-      .all()
-    const existingNames = new Set((existingFileNameRows.results as any[]).map(r => r.filename))
-    if (existingNames.size) {
-      return { success: false, message: `目标文件夹中已存在同名文件：${[...existingNames].join(', ')}` }
-    }
-  }
+  // 事务开始
+  await db.prepare('SAVEPOINT move_tx').bind().run()
+  let moved = 0, skipped = 0, failed = 0
 
-  // 执行移动（先文件后文件夹，避免触发潜在的级联问题）
-  // 说明：适配器在 MySQL 下未提供连接级事务，这里通过“先校验后更新”的方式尽量避免部分成功。
-  let movedFileCount = 0
-  let movedFolderCount = 0
+  const findDup = async (destFolderId: number | null, filename: string) => {
+    const sql = destFolderId === null
+      ? `SELECT id FROM files WHERE user_id = ? AND folder_id IS NULL AND filename = ? LIMIT 1`
+      : `SELECT id FROM files WHERE user_id = ? AND folder_id = ? AND filename = ? LIMIT 1`
+    const args = destFolderId === null ? [userId, filename] : [userId, destFolderId, filename]
+    const row = await db.prepare(sql).bind(...args).first()
+    return row ? Number(row.id) : null
+  }
 
   try {
-    if (fileIds.length) {
-      const res: any = await db
-        .prepare(`UPDATE files SET folder_id = ? WHERE user_id = ? AND id IN (${placeholders(fileIds.length)})`)
-        .bind(targetFolderId, userId, ...fileIds)
-        .run()
-      movedFileCount = (res?.meta?.changes ?? res?.meta?.affectedRows ?? 0)
+    for (const item of plan) {
+      const { id, filename, srcFolderId, destFolderId } = item
+
+      // 移动到相同文件夹（同位置）=> 直接跳过，避免“自我覆盖/自杀”
+      if ((srcFolderId ?? null) === (destFolderId ?? null)) {
+        skipped++
+        continue
+      }
+
+      // 查目的地是否存在同名文件
+      const dupId = await findDup(destFolderId, filename)
+
+      if (dupId !== null) {
+        // 冲突存在
+        if (body?.skipIfExist) {
+          // 跳过
+          skipped++
+          continue
+        } else if (body?.overwrite) {
+          // 先删目的地重名，再移动源（UPDATE 源记录）
+          if (dupId !== id) {
+            await db.prepare('DELETE FROM files WHERE id = ?').bind(dupId).run()
+          }
+          await db
+            .prepare('UPDATE files SET folder_id = ? WHERE id = ?')
+            .bind(destFolderId, id)
+            .run()
+          moved++
+        } else {
+          // 默认：生成唯一名，直接在源记录上改名 + 改目录
+          const { name: newName } = await resolveUniqueFilename(db, userId, destFolderId, filename)
+          await db
+            .prepare('UPDATE files SET folder_id = ?, filename = ? WHERE id = ?')
+            .bind(destFolderId, newName, id)
+            .run()
+          moved++
+        }
+      } else {
+        // 无冲突：直接 MOVE（UPDATE）
+        await db
+          .prepare('UPDATE files SET folder_id = ? WHERE id = ?')
+          .bind(destFolderId, id)
+          .run()
+        moved++
+      }
     }
 
-    if (folderIds.length) {
-      const res: any = await db
-        .prepare(`UPDATE folders SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id IN (${placeholders(folderIds.length)})`)
-        .bind(targetFolderId, userId, ...folderIds)
-        .run()
-      movedFolderCount = (res?.meta?.changes ?? res?.meta?.affectedRows ?? 0)
+    // 清理原空目录（仅对被选中的顶层目录做清理）
+    for (const folderId of folderIds) {
+      await delEmptySubfolder(db, folderId)
     }
+
+    await db.prepare('RELEASE move_tx').bind().run()
+
+    // 移动完成后再重算存储
+    await recalculateUsedStorage(db, userId)
 
     return {
       success: true,
-      moved: { folders: movedFolderCount, files: movedFileCount }
+      moved: { folders: folderIds.length, files: moved },
+      skipped,
+      failed,
+      message: '移动完成',
     }
-  } catch (err: any) {
-    // 可能因唯一索引冲突或其他原因失败
-    return { success: false, message: err?.message || '移动失败，请稍后重试' }
+  } catch (e: any) {
+    try {
+      await db.prepare('ROLLBACK TO move_tx').bind().run()
+      await db.prepare('RELEASE move_tx').bind().run()
+    } catch { }
+    return { success: false, moved: { folders: 0, files: 0 }, skipped, failed: plan.length - moved - skipped, message: e?.message || '移动失败' }
   }
 })

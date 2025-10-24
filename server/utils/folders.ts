@@ -72,9 +72,9 @@ export async function createFolder(
   // 防重（同一父级下不允许重名）
   const exists = parentId === null
     ? await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ?')
-        .bind(userId, nameRaw).first()
+      .bind(userId, nameRaw).first()
     : await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id = ? AND name = ?')
-        .bind(userId, parentId, nameRaw).first()
+      .bind(userId, parentId, nameRaw).first()
 
   if (exists) {
     throw createError({ statusCode: 409, statusMessage: '已存在同名文件夹' })
@@ -166,13 +166,13 @@ export async function ensurePaths(
             // 兜底查询
             const back = currentParent === null
               ? await db
-                  .prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? ORDER BY id DESC LIMIT 1')
-                  .bind(userId, seg)
-                  .first()
+                .prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ? ORDER BY id DESC LIMIT 1')
+                .bind(userId, seg)
+                .first()
               : await db
-                  .prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? ORDER BY id DESC LIMIT 1')
-                  .bind(userId, currentParent, seg)
-                  .first()
+                .prepare('SELECT id FROM folders WHERE user_id = ? AND parent_id = ? AND name = ? ORDER BY id DESC LIMIT 1')
+                .bind(userId, currentParent, seg)
+                .first()
             currentParent = Number(back?.id)
           }
         } else {
@@ -187,7 +187,7 @@ export async function ensurePaths(
     try {
       await db.prepare('ROLLBACK TO ensure_paths_tx').bind().run()
       await db.prepare('RELEASE ensure_paths_tx').bind().run()
-    } catch {}
+    } catch { }
     throw e
   }
 

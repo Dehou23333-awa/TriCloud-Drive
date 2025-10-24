@@ -100,6 +100,10 @@ export function useClipboard(
         notify(res?.message || (c.mode === 'cut' ? '移动失败' : '复制失败'), 'error')
         return
       }
+      if (res.success && c.mode === 'cut')
+      {
+        notify(`移动成功！移动文件${res?.moved?.files}，移动文件夹${res?.moved?.folders}，跳过${res?.skipped}，失败${res?.failed}`,'success')
+      }
       clipboard.value = null
       clearSelection()
       await fetchFiles()

@@ -11,6 +11,8 @@ export const MoveService = {
       success: boolean
       message?: string
       moved?: { folders: number; files: number }
+      skipped:number
+      failed: number
     }>
   }
 }

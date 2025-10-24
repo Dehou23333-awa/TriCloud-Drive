@@ -53,22 +53,22 @@ export async function resolveUniqueFilename(db: Database, userId: number, folder
 }
 
 
-export async function save(db: Database, file: FileRecord, userId: number, folderId: number | null, overwrite: boolean, skipIfExist: boolean): Promise<GeneralResponse> {
+export async function save(db: Database, file: FileRecord, overwrite: boolean | null | undefined, skipIfExist: boolean | null | undefined): Promise<GeneralResponse> {
+    overwrite = !!overwrite
+    skipIfExist = !!skipIfExist
     if (overwrite && skipIfExist) {
         throw skipAndOverwriteError
     }
+    const folderId = file.folderId
+    const userId = file.user_id
     // 将 0/undefined 视为根目录（NULL）
     const folderIdVal =
         Number.isFinite(folderId) && Number(folderId) > 0 ? Number(folderId) : null
     const filename = file.filename?.trim()
 
     if (!overwrite && !skipIfExist) {
-        
-        const newFilename = (await resolveUniqueFilename(db, userId, folderId, filename)).name
-        if (newFilename !== filename && skipIfExist) {
-            return { success: true }
-        }
 
+        const newFilename = (await resolveUniqueFilename(db, userId, folderId, filename)).name
 
         const sql = `
             INSERT INTO files
@@ -90,21 +90,20 @@ export async function save(db: Database, file: FileRecord, userId: number, folde
         await db.prepare(sql).bind(...params).run()
         return { success: true }
     }
-    else if (overwrite)
-    {
+    else if (overwrite) {
         const sql = `
-            INSERT INTO files (
-            user_id, folder_id, filename, file_key, file_size, file_url, content_type, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(folder_id, filename)
-            DO UPDATE SET
-            file_key     = excluded.file_key,
-            file_size    = excluded.file_size,
-            file_url     = excluded.file_url,
-            content_type = excluded.content_type,
-            created_at   = excluded.created_at;
-        `
+      INSERT INTO files (
+      user_id, folder_id, filename, file_key, file_size, file_url, content_type, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, folder_id, filename)
+      DO UPDATE SET
+      file_key     = excluded.file_key,
+      file_size    = excluded.file_size,
+      file_url     = excluded.file_url,
+      content_type = excluded.content_type,
+      created_at   = excluded.created_at;
+  `
         const params = [
             Number(userId),
             folderIdVal,
@@ -115,10 +114,9 @@ export async function save(db: Database, file: FileRecord, userId: number, folde
             file.contentType || null,
             file.createdAt,
         ]
-        await db.prepare(sql).bind(...params).first()
+        await db.prepare(sql).bind(...params).run() // 这里改为 run()
         return { success: true }
-    } else if (skipIfExist)
-    {
+    } else if (skipIfExist) {
         const stmt = db.prepare(`
         INSERT OR IGNORE INTO files (
             user_id, folder_id, filename, file_key, file_size, file_url, content_type, created_at
@@ -140,8 +138,7 @@ export async function save(db: Database, file: FileRecord, userId: number, folde
             return { success: true }
         }
         else return { success: false }
-    } else
-    {
+    } else {
         throw ServerError
     }
 }
@@ -159,7 +156,6 @@ export async function getFileById(db: Database, fileId: number): Promise<FileRec
         content_type AS contentType,
         created_at   AS createdAt,
         user_id
-        folder_id
       FROM files
       WHERE id = ?
     `)
@@ -185,8 +181,113 @@ export async function getFileById(db: Database, fileId: number): Promise<FileRec
         contentType: row.contentType ? String(row.contentType) : '',
         createdAt: String(row.createdAt),
         user_id: Number(row.user_id),
-        folder_id: Number(row.folder_id)
     }
 
     return record
+}
+
+export async function del(db: Database, fileId: number): Promise<undefined> {
+    await db.prepare(`
+        DELETE FROM files WHERE id = ?;
+    `).bind(fileId).run()
+}
+
+export async function delEmptySubfolder(db: Database, folderId: number) {
+    if (folderId == null || Number.isNaN(Number(folderId))) return
+
+    const CHUNK_SIZE = 500
+
+    const rowsFromAll = (res: any) => Array.isArray(res?.results) ? res.results : []
+    const affectedFromRun = (res: any) => {
+        const meta = res?.meta ?? {}
+        if (typeof meta.changes === 'number') return meta.changes       // SQLite / D1
+        if (typeof meta.affectedRows === 'number') return meta.affectedRows // MySQL
+        return 0
+    }
+    const placeholders = (n: number) => new Array(n).fill('?').join(',')
+
+    // 1) 收集整个子树（包含 folderId 自身）
+    const subtree = new Set<number>()
+    subtree.add(Number(folderId))
+    let frontier: number[] = [Number(folderId)]
+
+    while (frontier.length > 0) {
+        const ph = placeholders(frontier.length)
+        const sql = `SELECT id FROM folders WHERE parent_id IN (${ph})`
+        const res = await db.prepare(sql).bind(...frontier).all()
+        const rows = rowsFromAll(res)
+
+        const next: number[] = []
+        for (const r of rows) {
+            const id = Number(r.id)
+            if (!subtree.has(id)) {
+                subtree.add(id)
+                next.push(id)
+            }
+        }
+        frontier = next
+    }
+
+    // 2) 反复删除叶子空文件夹，直到没有可删者
+    while (true) {
+        const ids = Array.from(subtree)
+        if (ids.length === 0) break
+
+        // 2.1 找出当前仍存在的“叶子空文件夹”
+        const empties: number[] = []
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            const batch = ids.slice(i, i + CHUNK_SIZE)
+            if (batch.length === 0) continue
+
+            const ph = placeholders(batch.length)
+            const selSql = `
+        SELECT f.id
+        FROM folders f
+        WHERE f.id IN (${ph})
+          AND NOT EXISTS (SELECT 1 FROM files   WHERE folder_id = f.id)
+          AND NOT EXISTS (SELECT 1 FROM folders WHERE parent_id = f.id)
+      `
+            const selRes = await db.prepare(selSql).bind(...batch).all()
+            const selRows = rowsFromAll(selRes)
+            for (const r of selRows) {
+                empties.push(Number(r.id))
+            }
+        }
+
+        if (empties.length === 0) break
+
+        // 2.2 删除这些空文件夹（分片删除，避免占位符过多）
+        let deletedThisRound = 0
+        for (let i = 0; i < empties.length; i += CHUNK_SIZE) {
+            const batch = empties.slice(i, i + CHUNK_SIZE)
+            const ph = placeholders(batch.length)
+            const delSql = `DELETE FROM folders WHERE id IN (${ph})`
+            const delRes = await db.prepare(delSql).bind(...batch).run()
+            deletedThisRound += affectedFromRun(delRes)
+        }
+
+        // 从子树集合里去掉已删除的 id（减少下轮遍历规模）
+        for (const id of empties) subtree.delete(id)
+
+        // 理论上 deletedThisRound > 0，否则会提前 break
+        if (deletedThisRound === 0) break
+    }
+}
+
+export async function recalculateUsedStorage(db: Database, userId: number): Promise<void> {
+    // 计算用户所有文件的总大小
+    const result = await db.prepare(`
+    SELECT COALESCE(SUM(file_size), 0) as totalSize 
+    FROM files 
+    WHERE user_id = ?
+  `).bind(userId).first();
+
+    const totalSize = result?.totalSize || 0;
+
+    // 更新用户的 usedStorage 字段
+    await db.prepare(`
+    UPDATE users 
+    SET usedStorage = ? 
+    WHERE id = ?
+  `).bind(totalSize, userId).run();
 }
