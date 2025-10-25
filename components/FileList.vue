@@ -130,7 +130,7 @@
                 <FolderPlusIcon class="h-5 w-5 text-gray-500" />
                 上传文件夹
               </button>
-              <!-- 冲突策略保留文字，避免歧义 -->
+              <!-- 冲突策略保留 -->
               <div class="px-4 py-2 border-t border-gray-100">
                 <div class="space-y-2 text-xs text-gray-600">
                   <label class="flex items-center gap-2">
@@ -171,34 +171,69 @@
           <ArrowPathIcon class="h-5 w-5" />
         </button>
 
-        <!-- 小屏“更多”菜单 -->
+        <!-- 小屏“更多”菜单（已加图标） -->
         <div class="relative sm:hidden">
           <button class="p-2 text-gray-600 hover:text-gray-800" @click.stop="mobileMoreOpen = !mobileMoreOpen" title="更多" aria-label="更多">
             <EllipsisVerticalIcon class="h-5 w-5" />
           </button>
           <div
             v-if="mobileMoreOpen"
-            class="absolute right-0 mt-2 w-44 z-20 bg-white border border-gray-200 rounded-md shadow-lg"
+            class="absolute right-0 mt-2 w-48 z-20 bg-white border border-gray-200 rounded-md shadow-lg py-1"
           >
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    :disabled="selectedCount === 0 || bulkDeleting"
-                    @click="deleteSelected(); mobileMoreOpen=false">删除所选</button>
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    :disabled="selectedCount === 0 || bulkDownloading"
-                    @click="downloadSelected(); mobileMoreOpen=false">下载所选</button>
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    :disabled="selectedCount === 0"
-                    @click="clipSelection(); mobileMoreOpen=false">剪贴所选</button>
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    :disabled="selectedCount === 0"
-                    @click="copySelection(); mobileMoreOpen=false">复制所选</button>
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    :disabled="!hasClipboard || pasting"
-                    @click="pasteClipboard(); mobileMoreOpen=false">
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+              :disabled="selectedCount === 0 || bulkDeleting"
+              @click="deleteSelected(); mobileMoreOpen=false"
+              aria-label="删除所选"
+            >
+              <TrashIcon class="h-5 w-5 text-red-600" />
+              删除所选
+            </button>
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+              :disabled="selectedCount === 0 || bulkDownloading"
+              @click="downloadSelected(); mobileMoreOpen=false"
+              aria-label="下载所选"
+            >
+              <ArrowDownTrayIcon class="h-5 w-5 text-indigo-600" />
+              下载所选
+            </button>
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+              :disabled="selectedCount === 0"
+              @click="clipSelection(); mobileMoreOpen=false"
+              aria-label="剪贴所选"
+            >
+              <ScissorsIcon class="h-5 w-5 text-indigo-600" />
+              剪贴所选
+            </button>
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+              :disabled="selectedCount === 0"
+              @click="copySelection(); mobileMoreOpen=false"
+              aria-label="复制所选"
+            >
+              <DocumentDuplicateIcon class="h-5 w-5 text-indigo-600" />
+              复制所选
+            </button>
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+              :disabled="!hasClipboard || pasting"
+              @click="pasteClipboard(); mobileMoreOpen=false"
+              aria-label="粘贴"
+            >
+              <ClipboardDocumentCheckIcon class="h-5 w-5 text-green-600" />
               {{ clipboard?.mode === 'cut' ? '粘贴（移动）' : '粘贴（复制）' }}
             </button>
             <div class="border-t border-gray-100 my-1"></div>
-            <button class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50" @click="createFolder(); mobileMoreOpen=false">新建文件夹</button>
+            <button
+              class="w-full px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              @click="createFolder(); mobileMoreOpen=false"
+              aria-label="新建文件夹"
+            >
+              <FolderPlusIcon class="h-5 w-5 text-indigo-600" />
+              新建文件夹
+            </button>
           </div>
         </div>
       </div>
@@ -408,7 +443,7 @@
       <p class="mt-1 text-sm text-gray-500">拖拽文件/文件夹到此处上传，或使用右上角“上传”按钮。</p>
     </div>
 
-    <!-- 小屏行内操作菜单（底部抽屉） -->
+    <!-- 小屏行内操作菜单（底部抽屉，已加图标） -->
     <transition name="fade">
       <div v-if="rowMenuOpen" class="fixed inset-0 z-50 sm:hidden">
         <div class="absolute inset-0 bg-black/30" @click="closeRowMenu"></div>
@@ -416,16 +451,80 @@
           <div class="mx-auto h-1.5 w-12 rounded bg-gray-300 mb-3"></div>
           <div class="grid grid-cols-4 gap-2 text-center text-xs">
             <!-- 文件动作 -->
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='file'" @click="renameFile(rowMenu.item as FileRecord); closeRowMenu()">重命名</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='file'" @click="deleteFile(rowMenu.item as FileRecord); closeRowMenu()">删除</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='file'" @click="clipFile(rowMenu.item as FileRecord); closeRowMenu()">剪贴</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='file'" @click="copyFile(rowMenu.item as FileRecord); closeRowMenu()">复制</button>
+            <button
+              v-if="rowMenu?.type==='file'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="renameFile(rowMenu.item as FileRecord); closeRowMenu()"
+              aria-label="重命名"
+            >
+              <PencilSquareIcon class="h-6 w-6 text-gray-700" />
+              <span class="mt-1">重命名</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='file'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="deleteFile(rowMenu.item as FileRecord); closeRowMenu()"
+              aria-label="删除"
+            >
+              <TrashIcon class="h-6 w-6 text-red-600" />
+              <span class="mt-1">删除</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='file'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="clipFile(rowMenu.item as FileRecord); closeRowMenu()"
+              aria-label="剪贴"
+            >
+              <ScissorsIcon class="h-6 w-6 text-indigo-600" />
+              <span class="mt-1">剪贴</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='file'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="copyFile(rowMenu.item as FileRecord); closeRowMenu()"
+              aria-label="复制"
+            >
+              <DocumentDuplicateIcon class="h-6 w-6 text-indigo-600" />
+              <span class="mt-1">复制</span>
+            </button>
 
             <!-- 文件夹动作 -->
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='folder'" @click="renameFolder(rowMenu.item as FolderRecord); closeRowMenu()">重命名</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='folder'" @click="deleteFolder(rowMenu.item as FolderRecord); closeRowMenu()">删除</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='folder'" @click="clipFolder(rowMenu.item as FolderRecord); closeRowMenu()">剪贴</button>
-            <button class="p-2 rounded hover:bg-gray-50" v-if="rowMenu?.type==='folder'" @click="copyFolder(rowMenu.item as FolderRecord); closeRowMenu()">复制</button>
+            <button
+              v-if="rowMenu?.type==='folder'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="renameFolder(rowMenu.item as FolderRecord); closeRowMenu()"
+              aria-label="重命名"
+            >
+              <PencilSquareIcon class="h-6 w-6 text-gray-700" />
+              <span class="mt-1">重命名</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='folder'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="deleteFolder(rowMenu.item as FolderRecord); closeRowMenu()"
+              aria-label="删除"
+            >
+              <TrashIcon class="h-6 w-6 text-red-600" />
+              <span class="mt-1">删除</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='folder'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="clipFolder(rowMenu.item as FolderRecord); closeRowMenu()"
+              aria-label="剪贴"
+            >
+              <ScissorsIcon class="h-6 w-6 text-indigo-600" />
+              <span class="mt-1">剪贴</span>
+            </button>
+            <button
+              v-if="rowMenu?.type==='folder'"
+              class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+              @click="copyFolder(rowMenu.item as FolderRecord); closeRowMenu()"
+              aria-label="复制"
+            >
+              <DocumentDuplicateIcon class="h-6 w-6 text-indigo-600" />
+              <span class="mt-1">复制</span>
+            </button>
           </div>
         </div>
       </div>
