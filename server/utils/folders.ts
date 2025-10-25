@@ -57,7 +57,7 @@ export async function createFolder(
   userId: number,
   params: { name?: any; parentId?: any }
 ) {
-  const nameRaw = String(params?.name || '').trim()
+  const nameRaw = normalizeFolderName(String(params?.name || '').trim())
   const parentId = normalizeFolderId(params?.parentId)
 
   if (!nameRaw) {
@@ -256,4 +256,81 @@ function isUniqueConstraintError(err: any) {
     msg.includes('constraint') ||
     msg.includes('ux_folders_user_parent_name')
   )
+}
+
+/**
+ * 处理文件夹名称，替换禁止字符和保留名称
+ * param rawFolderName 原始文件夹名称
+ * returns 处理后的安全文件夹名称
+ */
+export function normalizeFolderName(rawFolderName: string): string {
+  if (!rawFolderName || rawFolderName.trim().length === 0) {
+    return '新建文件夹';
+  }
+
+  // 字符替换映射表
+  const charReplacements: { [key: string]: string } = {
+    '<': '＜',
+    '>': '＞',
+    ':': 'ː',
+    '"': '＂',
+    '/': '⁄',
+    '\\': '＼',
+    '|': '∣',
+    '?': '？',
+    '*': '＊'
+  };
+
+  // 系统保留字映射表（只处理开头的字符）
+  const reservedWordReplacements: { [key: string]: string } = {
+    'C': 'Ⅽ',
+    'P': 'Ｐ',
+    'A': 'Ａ',
+    'N': 'Ｎ',
+    'L': 'Ｌ'
+  };
+
+  // 系统保留名称列表（不区分大小写）
+  const reservedNames = [
+    'CON', 'PRN', 'AUX', 'NUL',
+    'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+  ];
+
+  let result = rawFolderName;
+
+  // 步骤1: 替换所有禁止字符
+  for (const [forbiddenChar, replacement] of Object.entries(charReplacements)) {
+    result = result.split(forbiddenChar).join(replacement);
+  }
+
+  // 步骤2: 检查并处理系统保留名称
+  const upperCaseResult = result.toUpperCase();
+  if (reservedNames.includes(upperCaseResult)) {
+    // 替换第一个字符
+    const firstChar = result.charAt(0).toUpperCase();
+    if (reservedWordReplacements[firstChar]) {
+      result = reservedWordReplacements[firstChar] + result.slice(1);
+    }
+  }
+
+  // 步骤3: 处理结尾的空格和点
+  if (result.length > 0) {
+    const lastChar = result.charAt(result.length - 1);
+    
+    if (lastChar === ' ') {
+      // 结尾空格替换为下划线
+      result = result.slice(0, -1) + '_';
+    } else if (lastChar === '.') {
+      // 结尾点替换为中点
+      result = result.slice(0, -1) + '・';
+    }
+  }
+
+  // 如果处理后变成空字符串，返回默认名称
+  if (result.trim().length === 0) {
+    return '新建文件夹';
+  }
+
+  return result;
 }
