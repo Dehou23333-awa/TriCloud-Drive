@@ -69,45 +69,48 @@ export async function createFolder(
 
   await assertParent(db, userId, parentId)
 
-  // 防重（同一父级下不允许重名）
-  const exists = parentId === null
-    ? await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id IS NULL AND name = ?')
-      .bind(userId, nameRaw).first()
-    : await db.prepare('SELECT 1 FROM folders WHERE user_id = ? AND parent_id = ? AND name = ?')
-      .bind(userId, parentId, nameRaw).first()
-
-  if (exists) {
-    throw createError({ statusCode: 409, statusMessage: '已存在同名文件夹' })
-  }
-
-  // 插入
-  const ins: any = await db
-    .prepare('INSERT INTO folders (user_id, parent_id, name) VALUES (?, ?, ?)')
-    .bind(userId, parentId, nameRaw)
-    .run()
-
-  const newId = getLastInsertId(ins?.meta)
+  // 自动生成唯一名称 + 抢占式重试（并发友好）
   let folder: any
-  if (newId) {
-    folder = await db
-      .prepare('SELECT id, name, parent_id AS parentId, created_at AS createdAt FROM folders WHERE id = ? AND user_id = ?')
-      .bind(newId, userId)
-      .first()
-  } else {
-    // 兜底查询（以防不同驱动 meta 差异）
-    const whereParent = parentId === null ? 'parent_id IS NULL' : 'parent_id = ?'
-    const stmt = db.prepare(`
-      SELECT id, name, parent_id AS parentId, created_at AS createdAt
-      FROM folders
-      WHERE user_id = ? AND name = ? AND ${whereParent}
-      ORDER BY id DESC
-      LIMIT 1
-    `)
-    const args = parentId === null ? [userId, nameRaw] : [userId, nameRaw, parentId]
-    folder = await stmt.bind(...args).first()
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { name: uniqueName } = await resolveUniqueFolderName(db, userId, parentId, nameRaw)
+    try {
+      const ins: any = await db
+        .prepare('INSERT INTO folders (user_id, parent_id, name) VALUES (?, ?, ?)')
+        .bind(userId, parentId, uniqueName)
+        .run()
+
+      const newId = getLastInsertId(ins?.meta)
+      if (newId) {
+        folder = await db
+          .prepare('SELECT id, name, parent_id AS parentId, created_at AS createdAt FROM folders WHERE id = ? AND user_id = ?')
+          .bind(newId, userId)
+          .first()
+      } else {
+        // 兜底查询（兼容不同驱动 meta 差异）
+        const whereParent = parentId === null ? 'parent_id IS NULL' : 'parent_id = ?'
+        const stmt = db.prepare(`
+          SELECT id, name, parent_id AS parentId, created_at AS createdAt
+          FROM folders
+          WHERE user_id = ? AND name = ? AND ${whereParent}
+          ORDER BY id DESC
+          LIMIT 1
+        `)
+        const args = parentId === null ? [userId, uniqueName] : [userId, uniqueName, parentId]
+        folder = await stmt.bind(...args).first()
+      }
+
+      return folder
+    } catch (e: any) {
+      if (isUniqueConstraintError(e)) {
+        // 与其他并发请求撞名了，稍等片刻后重试
+        await new Promise((r) => setTimeout(r, 2))
+        continue
+      }
+      throw e
+    }
   }
 
-  return folder
+  throw createError({ statusCode: 409, statusMessage: '在并发情况下无法生成唯一文件夹名，请稍后重试' })
 }
 
 /**
@@ -192,4 +195,65 @@ export async function ensurePaths(
   }
 
   return result
+}
+
+export async function resolveUniqueFolderName(
+  db: Database,
+  userId: number,
+  parentId: number | null,
+  desired: string
+): Promise<{ name: string; base: string; nextN: number }> {
+  const base = desired
+  const likePattern = `${escapeLike(base)} (%)`
+
+  let rows: any
+  if (parentId === null) {
+    rows = await db
+      .prepare(`
+        SELECT name FROM folders
+        WHERE user_id = ?
+          AND parent_id IS NULL
+          AND (name = ? OR name LIKE ? ESCAPE '\\')
+      `)
+      .bind(userId, desired, likePattern)
+      .all()
+  } else {
+    rows = await db
+      .prepare(`
+        SELECT name FROM folders
+        WHERE user_id = ?
+          AND parent_id = ?
+          AND (name = ? OR name LIKE ? ESCAPE '\\')
+      `)
+      .bind(userId, parentId, desired, likePattern)
+      .all()
+  }
+
+  const existing = new Set<string>((rows?.results || []).map((r: any) => String(r.name)))
+  if (!existing.has(desired)) {
+    return { name: desired, base, nextN: 1 }
+  }
+
+  // 与文件一致：如果只存在原名，没有任何 (n)，则生成 (2)
+  const re = new RegExp(`^${escapeRegExp(base)} \\((\\d+)\\)$`)
+  let maxN = 1
+  for (const name of existing) {
+    const m = name.match(re)
+    if (m) {
+      const n = parseInt(m[1], 10)
+      if (Number.isFinite(n) && n > maxN) maxN = n
+    }
+  }
+  const nextN = maxN + 1
+  return { name: `${base} (${nextN})`, base, nextN }
+}
+
+function isUniqueConstraintError(err: any) {
+  const msg = String(err?.message || '')
+  return (
+    msg.includes('UNIQUE') ||
+    msg.includes('unique') ||
+    msg.includes('constraint') ||
+    msg.includes('ux_folders_user_parent_name')
+  )
 }
