@@ -29,52 +29,72 @@
         </nav>
       </div>
 
-      <!-- 顶部工具栏 -->
+      <!-- 顶部工具栏（图标化） -->
       <div class="flex items-center gap-3">
-        <button class="text-sm text-gray-600 hover:text-gray-800" v-if="breadcrumbs.length > 1" @click="handleGoUp">
-          返回上一级
+        <!-- 返回上一级 -->
+        <button
+          class="text-sm text-gray-600 hover:text-gray-800"
+          v-if="breadcrumbs.length > 1"
+          @click="handleGoUp"
+          title="返回上一级"
+          aria-label="返回上一级"
+        >
+          <ArrowLeftIcon class="h-5 w-5" />
         </button>
 
-        <!-- 批量操作 -->
+        <!-- 批量删除 -->
         <button
           class="text-sm text-red-600 hover:text-red-500 disabled:opacity-50"
           :disabled="selectedCount === 0 || bulkDeleting"
           @click="deleteSelected"
+          title="删除所选"
+          aria-label="删除所选"
         >
-          删除
+          <TrashIcon class="h-5 w-5" />
         </button>
+
+        <!-- 批量下载 -->
         <button
           class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
           :disabled="selectedCount === 0 || bulkDownloading"
           @click="downloadSelected"
+          title="下载所选"
+          aria-label="下载所选"
         >
-          下载
+          <ArrowDownTrayIcon class="h-5 w-5" />
         </button>
 
-        <!-- 剪贴 / 复制 / 粘贴 -->
+        <!-- 剪贴 -->
         <button
           class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
           :disabled="selectedCount === 0"
           @click="clipSelection"
-          title="剪贴所选项目（移动）"
+          title="剪贴所选（移动）"
+          aria-label="剪贴所选（移动）"
         >
-          剪贴
+          <ScissorsIcon class="h-5 w-5" />
         </button>
+
+        <!-- 复制 -->
         <button
           class="text-sm text-indigo-600 hover:text-indigo-500 disabled:opacity-50"
           :disabled="selectedCount === 0"
           @click="copySelection"
-          title="复制所选项目（拷贝）"
+          title="复制所选（拷贝）"
+          aria-label="复制所选（拷贝）"
         >
-          复制
+          <DocumentDuplicateIcon class="h-5 w-5" />
         </button>
+
+        <!-- 粘贴（移动/复制到当前文件夹） -->
         <button
           class="text-sm text-green-600 hover:text-green-500 disabled:opacity-50"
           :disabled="!hasClipboard || pasting"
           @click="pasteClipboard"
           :title="clipboard?.mode === 'cut' ? '移动到当前文件夹' : '复制到当前文件夹'"
+          aria-label="粘贴到当前文件夹"
         >
-          {{ pasteBtnText }}
+          <ClipboardDocumentCheckIcon class="h-5 w-5" />
         </button>
 
         <span v-if="hasClipboard" class="text-xs text-gray-500">
@@ -83,8 +103,13 @@
 
         <!-- 上传按钮（悬浮菜单） -->
         <div class="relative" ref="uploadMenuRef" @mouseenter="openUploadMenu" @mouseleave="scheduleCloseUploadMenu">
-          <button class="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700" @click.stop="toggleUploadMenu">
-            上传
+          <button
+            class="text-sm p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+            @click.stop="toggleUploadMenu"
+            title="上传"
+            aria-label="上传"
+          >
+            <ArrowUpTrayIcon class="h-5 w-5" />
           </button>
           <transition name="fade-slide">
             <div
@@ -93,13 +118,15 @@
               @mouseenter="openUploadMenu"
               @mouseleave="scheduleCloseUploadMenu"
             >
-              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" @click="fileInputRef?.click()">
+              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2" @click="fileInputRef?.click()">
+                <DocumentArrowUpIcon class="h-5 w-5 text-gray-500" />
                 上传文件
               </button>
-              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" @click="folderInputRef?.click()">
+              <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2" @click="folderInputRef?.click()">
+                <FolderPlusIcon class="h-5 w-5 text-gray-500" />
                 上传文件夹
               </button>
-              <!-- 这里是改动：复选框 -> 三个单选框 -->
+              <!-- 冲突策略保留文字，避免歧义 -->
               <div class="px-4 py-2 border-t border-gray-100">
                 <div class="space-y-2 text-xs text-gray-600">
                   <label class="flex items-center gap-2">
@@ -116,13 +143,29 @@
                   </label>
                 </div>
               </div>
-              <!-- 改动结束 -->
             </div>
           </transition>
         </div>
 
-        <button class="text-sm text-indigo-600 hover:text-indigo-500" @click="createFolder">新建文件夹</button>
-        <button @click="fetchFiles" class="text-sm text-indigo-600 hover:text-indigo-500">刷新</button>
+        <!-- 新建文件夹 -->
+        <button
+          class="text-sm text-indigo-600 hover:text-indigo-500"
+          @click="createFolder"
+          title="新建文件夹"
+          aria-label="新建文件夹"
+        >
+          <FolderPlusIcon class="h-5 w-5" />
+        </button>
+
+        <!-- 刷新 -->
+        <button
+          @click="fetchFiles"
+          class="text-sm text-indigo-600 hover:text-indigo-500"
+          title="刷新"
+          aria-label="刷新"
+        >
+          <ArrowPathIcon class="h-5 w-5" />
+        </button>
       </div>
     </div>
 
@@ -189,28 +232,55 @@
           </div>
         </div>
         <div class="flex items-center space-x-3">
-          <button class="text-sm text-blue-600 hover:text-blue-500" @click.stop="downloadFolder(folder)"
-            :disabled="downloadingFolderId === folder.id">
-            {{ downloadingFolderId === folder.id ? '打包中...' : '下载' }}
+          <!-- 下载文件夹 -->
+          <button
+            class="text-sm text-blue-600 hover:text-blue-500"
+            @click.stop="downloadFolder(folder)"
+            :disabled="downloadingFolderId2 === folder.id"
+            title="下载"
+            aria-label="下载"
+          >
+            <template v-if="downloadingFolderId2 === folder.id">
+              <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </template>
+            <template v-else>
+              <ArrowDownTrayIcon class="h-5 w-5" />
+            </template>
           </button>
-          <button class="text-sm text-red-600 hover:text-red-500" @click.stop="deleteFolder(folder)">
-            删除
+
+          <!-- 删除 -->
+          <button class="text-sm text-red-600 hover:text-red-500" @click.stop="deleteFolder(folder)" title="删除" aria-label="删除">
+            <TrashIcon class="h-5 w-5" />
           </button>
-          <button class="text-sm text-gray-600 hover:text-gray-800" @click.stop="renameFolder(folder)">
-            重命名
+
+          <!-- 重命名 -->
+          <button class="text-sm text-gray-600 hover:text-gray-800" @click.stop="renameFolder(folder)" title="重命名" aria-label="重命名">
+            <PencilSquareIcon class="h-5 w-5" />
           </button>
-          <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="clipFolder(folder)">
-            剪贴
+
+          <!-- 剪贴 -->
+          <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="clipFolder(folder)" title="剪贴" aria-label="剪贴">
+            <ScissorsIcon class="h-5 w-5" />
           </button>
-          <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="copyFolder(folder)">
-            复制
+
+          <!-- 复制 -->
+          <button class="text-sm text-indigo-600 hover:text-indigo-500" @click.stop="copyFolder(folder)" title="复制" aria-label="复制">
+            <DocumentDuplicateIcon class="h-5 w-5" />
           </button>
-          <div class="flex items-center space-x-1 text-sm text-gray-400 cursor-pointer" @click="handleNavigateToFolder(folder)">
-            进入
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
+
+          <!-- 进入 -->
+          <button
+            class="flex items-center text-sm text-gray-400 hover:text-gray-600"
+            @click="handleNavigateToFolder(folder)"
+            title="进入"
+            aria-label="进入"
+          >
+            <ArrowRightIcon class="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -247,11 +317,30 @@
         </div>
 
         <div class="flex items-center space-x-2">
-          <button @click="downloadFile(file)" class="text-sm text-blue-600 hover:text-blue-500">下载</button>
-          <button @click="renameFile(file)" class="text-sm text-gray-600 hover:text-gray-800">重命名</button>
-          <button @click="deleteFile(file)" class="text-sm text-red-600 hover:text-red-500">删除</button>
-          <button @click="clipFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500">剪贴</button>
-          <button @click="copyFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500">复制</button>
+          <!-- 下载 -->
+          <button @click="downloadFile(file)" class="text-sm text-blue-600 hover:text-blue-500" title="下载" aria-label="下载">
+            <ArrowDownTrayIcon class="h-5 w-5" />
+          </button>
+
+          <!-- 重命名 -->
+          <button @click="renameFile(file)" class="text-sm text-gray-600 hover:text-gray-800" title="重命名" aria-label="重命名">
+            <PencilSquareIcon class="h-5 w-5" />
+          </button>
+
+          <!-- 删除 -->
+          <button @click="deleteFile(file)" class="text-sm text-red-600 hover:text-red-500" title="删除" aria-label="删除">
+            <TrashIcon class="h-5 w-5" />
+          </button>
+
+          <!-- 剪贴 -->
+          <button @click="clipFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500" title="剪贴" aria-label="剪贴">
+            <ScissorsIcon class="h-5 w-5" />
+          </button>
+
+          <!-- 复制 -->
+          <button @click="copyFile(file)" class="text-sm text-indigo-600 hover:text-indigo-500" title="复制" aria-label="复制">
+            <DocumentDuplicateIcon class="h-5 w-5" />
+          </button>
         </div>
       </div>
     </div>
@@ -283,6 +372,22 @@ import { useUploadMenu } from '~/composables/useUploadMenu'
 import { useNameEditing } from '~/composables/useNameEditing'
 import { useFolderDownload } from '~/composables/useFolderDownload'
 import { useDnDUpload } from '~/composables/useDnDUpload'
+
+/* 引入图标 */
+import {
+  ArrowLeftIcon,
+  TrashIcon,
+  ArrowDownTrayIcon,
+  ScissorsIcon,
+  DocumentDuplicateIcon,
+  ClipboardDocumentCheckIcon,
+  ArrowUpTrayIcon,
+  FolderPlusIcon,
+  ArrowPathIcon,
+  PencilSquareIcon,
+  ArrowRightIcon,
+  DocumentArrowUpIcon
+} from '@heroicons/vue/24/outline'
 
 const props = defineProps<{
   targetUserId?: number | null
@@ -321,7 +426,7 @@ const {
 
 /* 批量操作&单项文件/文件夹操作 */
 const {
-  bulkDeleting, bulkDownloading, downloadingFolderId,
+  bulkDeleting, bulkDownloading,
   downloadFile, deleteFile, deleteFolder,
   deleteSelected, downloadSelected
 } = useBulkActions(folders, files, selectedFolderIds, selectedFileIds, { targetUserId: targetUserIdRef })
@@ -332,14 +437,13 @@ const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileU
 /* 上传悬浮菜单 */
 const { showUploadMenu, uploadMenuRef, openUploadMenu, scheduleCloseUploadMenu, toggleUploadMenu } = useUploadMenu()
 
-
 /* 新建/重命名 */
 const { createFolder, renameFolder, renameFile } = useNameEditing(
   folders, files, breadcrumbs, currentFolderId, fetchFiles,
   { targetUserId: targetUserIdRef }
 )
 
-/* 文件夹打包下载 */
+/* 文件夹打包下载（使用 downloadingFolderId2） */
 const { downloadingFolderId: downloadingFolderId2, downloadFolder } = useFolderDownload({ targetUserId: targetUserIdRef })
 
 /* 拖拽/选择上传 */
