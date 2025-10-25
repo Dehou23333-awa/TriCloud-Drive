@@ -156,3 +156,20 @@ function showNotification(text: string, type: string) {
 </script>
 
 <style scoped src="~/assets/css/login.css"></style>
+
+<style scoped>
+/* 移动端隐藏左侧装饰，右侧表单占满宽度 */
+@media (max-width: 768px) {
+  .decoration {
+    display: none;
+  }
+  .login-card {
+    /* 若外层是 grid 或 flex，都能优雅降级为单列 */
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+  .form-section {
+    width: 100%;
+  }
+}
+</style>
