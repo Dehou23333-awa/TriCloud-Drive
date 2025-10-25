@@ -5,9 +5,12 @@
       <template #extra>
         <NuxtLink
           to="/services/change-password"
-          class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+          class="text-gray-700 hover:text-gray-900 rounded-md text-sm font-medium p-2 sm:px-3 sm:py-2 flex items-center"
+          aria-label="修改密码"
+          title="修改密码"
         >
-          修改密码
+          <KeyIcon class="h-5 w-5" />
+          <span class="hidden sm:inline ml-2">修改密码</span>
         </NuxtLink>
       </template>
     </AppNavbar>
@@ -28,7 +31,6 @@
       </div>
 
       <div v-else class="px-4 py-6 sm:px-0">
-        <!-- 上传区已合并到文件列表区域 -->
         <FileList
           ref="fileListRef"
           @folder-change="onFolderChange"
@@ -39,8 +41,9 @@
 </template>
 
 <script setup lang="ts">
-const { isLoggedIn } = useAuth()
+import { KeyIcon } from '@heroicons/vue/24/outline'
 
+const { isLoggedIn } = useAuth()
 const fileListRef = ref()
 const currentFolderId = ref<number | null>(null)
 

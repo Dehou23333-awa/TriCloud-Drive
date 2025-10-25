@@ -115,6 +115,10 @@
           >
             <ArrowUpTrayIcon class="h-5 w-5" />
           </button>
+
+          <!-- 移动端点击遮罩：点击外部关闭上传菜单；桌面端不显示遮罩 -->
+          <div v-if="showUploadMenu" class="fixed inset-0 z-10 sm:hidden" @click="closeUploadMenu"></div>
+
           <transition name="fade-slide">
             <div
               v-show="showUploadMenu"
@@ -171,70 +175,74 @@
           <ArrowPathIcon class="h-5 w-5" />
         </button>
 
-        <!-- 小屏“更多”菜单（已加图标） -->
+        <!-- 小屏“更多”菜单（有图标） -->
         <div class="relative sm:hidden">
           <button class="p-2 text-gray-600 hover:text-gray-800" @click.stop="mobileMoreOpen = !mobileMoreOpen" title="更多" aria-label="更多">
             <EllipsisVerticalIcon class="h-5 w-5" />
           </button>
-          <div
-            v-if="mobileMoreOpen"
-            class="absolute right-0 mt-2 w-48 z-20 bg-white border border-gray-200 rounded-md shadow-lg py-1"
-          >
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
-              :disabled="selectedCount === 0 || bulkDeleting"
-              @click="deleteSelected(); mobileMoreOpen=false"
-              aria-label="删除所选"
+
+          <!-- 移动端点击遮罩：点击外部关闭更多菜单 -->
+          <template v-if="mobileMoreOpen">
+            <div class="fixed inset-0 z-10" @click="mobileMoreOpen=false"></div>
+            <div
+              class="absolute right-0 mt-2 w-48 z-20 bg-white border border-gray-200 rounded-md shadow-lg py-1"
             >
-              <TrashIcon class="h-5 w-5 text-red-600" />
-              删除所选
-            </button>
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
-              :disabled="selectedCount === 0 || bulkDownloading"
-              @click="downloadSelected(); mobileMoreOpen=false"
-              aria-label="下载所选"
-            >
-              <ArrowDownTrayIcon class="h-5 w-5 text-indigo-600" />
-              下载所选
-            </button>
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
-              :disabled="selectedCount === 0"
-              @click="clipSelection(); mobileMoreOpen=false"
-              aria-label="剪贴所选"
-            >
-              <ScissorsIcon class="h-5 w-5 text-indigo-600" />
-              剪贴所选
-            </button>
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
-              :disabled="selectedCount === 0"
-              @click="copySelection(); mobileMoreOpen=false"
-              aria-label="复制所选"
-            >
-              <DocumentDuplicateIcon class="h-5 w-5 text-indigo-600" />
-              复制所选
-            </button>
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
-              :disabled="!hasClipboard || pasting"
-              @click="pasteClipboard(); mobileMoreOpen=false"
-              aria-label="粘贴"
-            >
-              <ClipboardDocumentCheckIcon class="h-5 w-5 text-green-600" />
-              {{ clipboard?.mode === 'cut' ? '粘贴（移动）' : '粘贴（复制）' }}
-            </button>
-            <div class="border-t border-gray-100 my-1"></div>
-            <button
-              class="w-full px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-              @click="createFolder(); mobileMoreOpen=false"
-              aria-label="新建文件夹"
-            >
-              <FolderPlusIcon class="h-5 w-5 text-indigo-600" />
-              新建文件夹
-            </button>
-          </div>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+                :disabled="selectedCount === 0 || bulkDeleting"
+                @click="deleteSelected(); mobileMoreOpen=false"
+                aria-label="删除所选"
+              >
+                <TrashIcon class="h-5 w-5 text-red-600" />
+                删除所选
+              </button>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+                :disabled="selectedCount === 0 || bulkDownloading"
+                @click="downloadSelected(); mobileMoreOpen=false"
+                aria-label="下载所选"
+              >
+                <ArrowDownTrayIcon class="h-5 w-5 text-indigo-600" />
+                下载所选
+              </button>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+                :disabled="selectedCount === 0"
+                @click="clipSelection(); mobileMoreOpen=false"
+                aria-label="剪贴所选"
+              >
+                <ScissorsIcon class="h-5 w-5 text-indigo-600" />
+                剪贴所选
+              </button>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+                :disabled="selectedCount === 0"
+                @click="copySelection(); mobileMoreOpen=false"
+                aria-label="复制所选"
+              >
+                <DocumentDuplicateIcon class="h-5 w-5 text-indigo-600" />
+                复制所选
+              </button>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2 text-gray-700"
+                :disabled="!hasClipboard || pasting"
+                @click="pasteClipboard(); mobileMoreOpen=false"
+                aria-label="粘贴"
+              >
+                <ClipboardDocumentCheckIcon class="h-5 w-5 text-green-600" />
+                {{ clipboard?.mode === 'cut' ? '粘贴（移动）' : '粘贴（复制）' }}
+              </button>
+              <div class="border-t border-gray-100 my-1"></div>
+              <button
+                class="w-full px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                @click="createFolder(); mobileMoreOpen=false"
+                aria-label="新建文件夹"
+              >
+                <FolderPlusIcon class="h-5 w-5 text-indigo-600" />
+                新建文件夹
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -647,6 +655,7 @@ const { uploading, uploadProgress, uploadError, uploadMultipleFiles } = useFileU
 
 /* 上传悬浮菜单 */
 const { showUploadMenu, uploadMenuRef, openUploadMenu, scheduleCloseUploadMenu, toggleUploadMenu } = useUploadMenu()
+const closeUploadMenu = () => { showUploadMenu.value = false }
 
 /* 新建/重命名 */
 const { createFolder, renameFolder, renameFile } = useNameEditing(
@@ -714,7 +723,7 @@ defineExpose({
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* 过渡动画（可按需替换为你项目现有的） */
+/* 过渡动画 */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 

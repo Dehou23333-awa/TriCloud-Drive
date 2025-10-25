@@ -9,19 +9,22 @@
           </h1>
         </div>
 
-        <div v-if="isLoggedIn" class="flex items-center space-x-4">
+        <div v-if="isLoggedIn" class="flex items-center space-x-2 sm:space-x-4">
           <span class="text-gray-700">
             欢迎，{{ user?.username }}
           </span>
 
-          <!-- 可选：已登录时额外的右侧内容（例如：返回首页按钮等） -->
+          <!-- 右侧额外内容（修改密码） -->
           <slot name="extra" />
 
           <button
             @click="handleLogout"
-            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+            class="flex items-center bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium p-2 sm:px-4 sm:py-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            aria-label="退出登录"
+            title="退出登录"
           >
-            退出登录
+            <ArrowRightOnRectangleIcon class="h-5 w-5" />
+            <span class="hidden sm:inline ml-2">退出登录</span>
           </button>
         </div>
 
@@ -45,6 +48,7 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowRightOnRectangleIcon } from '@heroicons/vue/24/outline'
 const { user, isLoggedIn, logout } = useAuth()
 const handleLogout = async () => { await logout() }
 </script>
