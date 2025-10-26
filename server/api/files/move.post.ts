@@ -3,22 +3,12 @@ import { getMeAndTarget } from '~/server/utils/auth-middleware'
 import { getDb } from '~/server/utils/db-adapter'
 import { ensurePaths } from '~/server/utils/folders'
 import { skipAndOverwriteError } from '~/types/error'
+import { uniqPositiveInts, placeholders } from '~/server/utils/functions'
 import {
   resolveUniqueFilename,
   delEmptySubfolder,
   recalculateUsedStorage,
 } from '~/server/utils/file'
-
-function placeholders(n: number) {
-  return Array(n).fill('?').join(',')
-}
-function uniqPositiveInts(arr: any[]): number[] {
-  return [...new Set(
-    (Array.isArray(arr) ? arr : [])
-      .map(Number)
-      .filter(n => Number.isInteger(n) && n > 0)
-  )]
-}
 
 export default defineEventHandler(async (event) => {
   const { targetUserId } = await getMeAndTarget(event)

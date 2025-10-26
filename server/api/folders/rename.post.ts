@@ -1,7 +1,8 @@
 // server/api/folders/rename.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
-import { getDb } from '~/server/utils/db-adapter'   // 按你的实际路径调整
-import { getMeAndTarget } from '~/server/utils/auth-middleware' // 替换为你项目里的鉴权方法
+import { getDb } from '~/server/utils/db-adapter'
+import { getMeAndTarget } from '~/server/utils/auth-middleware'
+import { normalizeFolderName } from '~/server/utils/folders'
 
 function isUniqueError(err: any) {
   return (
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody<{ folderId: number; newName: string }>(event)
   const folderId = Number(body?.folderId)
-  const newName = (body?.newName || '').trim()
+  const newName = normalizeFolderName((body?.newName || '').trim())
 
   if (!folderId || !newName) {
     throw createError({ statusCode: 400, statusMessage: 'folderId/newName 缺失' })
