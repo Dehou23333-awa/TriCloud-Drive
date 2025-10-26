@@ -103,6 +103,9 @@ export function useClipboard(
       if (res.success && c.mode === 'cut')
       {
         notify(`移动成功！移动文件${res?.moved?.files}，移动文件夹${res?.moved?.folders}，跳过${res?.skipped}，失败${res?.failed}`,'success')
+      } else if (res.success && c.mode === 'copy')
+      {
+        notify(`复制成功！复制文件${res?.copied?.files}，复制文件夹${res?.copied?.folders}，跳过${res?.skipped}，失败${res?.failed}`,'success')
       }
       clipboard.value = null
       clearSelection()
