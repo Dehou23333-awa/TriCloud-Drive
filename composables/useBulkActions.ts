@@ -20,8 +20,15 @@ export function useBulkActions(
   const downloadingFolderId = ref<number | null>(null)
 
   const downloadFile = async (file: FileRecord) => {
-    const res = await FilesService.downloadSign({ fileKey: file.fileKey, filename: file.filename }, tRef?.value ?? null)
-    if (res.success) triggerDownload(res.data.downloadUrl, res.data.filename)
+    try {
+      const res = await FilesService.downloadSign({ fileKey: file.fileKey, filename: file.filename }, tRef?.value ?? null)
+      if (res.success) triggerDownload(res.data.downloadUrl, res.data.filename)
+      else {
+        notify(res?.message || '下载文件失败','error')
+      }
+    } catch {
+      notify("下载文件失败",'error')
+    }
   }
 
   const deleteFile = async (file: FileRecord) => {

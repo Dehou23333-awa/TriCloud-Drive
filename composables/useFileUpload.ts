@@ -152,11 +152,12 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
       //console.log(fileUrl)
       return
     } catch (error: any) {
+      /*
       if (skip === true)
       {
         notify(file.name + '已跳过','success')
-      }
-      else if (!partOfBatch) 
+      }*/
+      if (!partOfBatch) 
       {
         notify(error.message || '上传失败', 'error')
         uploadError.value = error.message || '上传失败'
