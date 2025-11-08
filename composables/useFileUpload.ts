@@ -157,12 +157,14 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
       {
         notify(file.name + '已跳过','success')
       }*/
+     
       if (!partOfBatch) 
       {
         notify(error.message || '上传失败', 'error')
-        uploadError.value = error.message || '上传失败'
-        throw error
+        
       }
+      uploadError.value = error.message || '上传失败'
+      throw error
     } finally {
       if (!partOfBatch) uploading.value = false
     }

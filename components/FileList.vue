@@ -406,6 +406,9 @@
         <div class="flex items-center space-x-2">
           <!-- 大屏：完整按钮组 -->
           <div class="hidden sm:flex items-center space-x-2">
+            <button @click="openPreview(file)" class="p-2 text-sm text-gray-600 hover:text-gray-800" title="预览" aria-label="预览">
+              <EyeIcon class="h-5 w-5" />
+            </button>
             <button @click="downloadFile(file)" class="p-2 text-sm text-blue-600 hover:text-blue-500" title="下载" aria-label="下载">
               <ArrowDownTrayIcon class="h-5 w-5" />
             </button>
@@ -455,6 +458,15 @@
           <div class="mx-auto h-1.5 w-12 rounded bg-gray-300 mb-3"></div>
           <div class="grid grid-cols-4 gap-2 text-center text-xs">
             <!-- 文件动作 -->
+            <button
+                v-if="rowMenu?.type==='file'"
+                class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
+                @click="openPreview(rowMenu.item as FileRecord); closeRowMenu()"
+                aria-label="预览"
+              >
+              <EyeIcon class="h-6 w-6 text-gray-700" />
+              <span class="mt-1">预览</span>
+            </button>
             <button
               v-if="rowMenu?.type==='file'"
               class="px-2 py-3 rounded hover:bg-gray-50 flex flex-col items-center justify-center"
@@ -569,6 +581,14 @@
     >
       <ArrowUpTrayIcon class="h-6 w-6" />
     </button>
+    <FilePreviewer
+     v-if="previewingFile"
+     :file="previewingFile"
+     :current-folder-id="currentFolderId"
+     :target-user-id="targetUserIdRef ?? null"
+     @close="closePreview"
+     @saved="fetchFiles"
+   />
   </div>
 </template>
 
@@ -587,6 +607,8 @@ import { useNameEditing } from '~/composables/useNameEditing'
 import { useFolderDownload } from '~/composables/useFolderDownload'
 import { useDnDUpload } from '~/composables/useDnDUpload'
 import FileIcon from '~/components/FileIcon.vue'
+import FilePreviewer from '~/components/FilePreviewer.vue'
+import { EyeIcon } from '@heroicons/vue/24/outline'
 
 /* 引入图标 */
 import {
@@ -610,6 +632,10 @@ const props = defineProps<{
   title?: string
 }>()
 const targetUserIdRef = toRef(props, 'targetUserId')
+
+const previewingFile = ref<FileRecord | null>(null)
+const openPreview = (file: FileRecord) => { previewingFile.value = file }
+const closePreview = () => { previewingFile.value = null }
 
 // 三态单选与两个布尔变量的映射
 const conflictStrategy = computed<'overwrite' | 'skip' | 'rename'>({
