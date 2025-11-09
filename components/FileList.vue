@@ -392,7 +392,7 @@
           <div class="flex-shrink-0">
             <FileIcon class="h-8 w-8 text-gray-400" :filename="file.filename" />
           </div>
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 cursor-pointer" @click="openPreview(file)">
             <p class="text-sm sm:text-base font-medium text-gray-900 truncate">
               {{ file.filename }}
             </p>
@@ -581,14 +581,15 @@
     >
       <ArrowUpTrayIcon class="h-6 w-6" />
     </button>
+    <!-- 全屏文件预览 -->
     <FilePreviewer
-     v-if="previewingFile"
-     :file="previewingFile"
-     :current-folder-id="currentFolderId"
-     :target-user-id="targetUserIdRef ?? null"
-     @close="closePreview"
-     @saved="fetchFiles"
-   />
+      v-if="previewingFile"
+      :file="previewingFile"
+      :current-folder-id="currentFolderId"
+      :target-user-id="targetUserIdRef?.value ?? null"
+      @close="closePreview"
+      @saved="fetchFiles"
+    />
   </div>
 </template>
 
@@ -636,6 +637,7 @@ const targetUserIdRef = toRef(props, 'targetUserId')
 const previewingFile = ref<FileRecord | null>(null)
 const openPreview = (file: FileRecord) => { previewingFile.value = file }
 const closePreview = () => { previewingFile.value = null }
+
 
 // 三态单选与两个布尔变量的映射
 const conflictStrategy = computed<'overwrite' | 'skip' | 'rename'>({
