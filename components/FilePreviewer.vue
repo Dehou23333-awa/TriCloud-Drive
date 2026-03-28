@@ -171,13 +171,22 @@ const isText  = computed(() => ['txt','log','csv','json','xml','yml','yaml','ini
 const isMd    = computed(() => ext.value === 'md' || ext.value === 'markdown')
 const isEditable = computed(() => isText.value || isMd.value)
 
+const currentFileSize = computed(() => {
+  if (isEditable.value) {
+    // 使用 TextEncoder 获取 UTF-8 字节长度（更符合实际文件存储）
+    const encoder = new TextEncoder()
+    return encoder.encode(textContent.value).length
+    // 或者使用 Blob: return new Blob([textContent.value]).size
+  }
+  return props.file.fileSize
+})
 const dirty = computed(() => isEditable.value && textContent.value !== originalContent.value)
 const prettySize = computed(() => {
-  const s = props.file?.fileSize ?? 0
+  const s = currentFileSize.value
   if (s < 1024) return `${s} B`
-  if (s < 1024 * 1024) return `${(s/1024).toFixed(1)} KB`
-  if (s < 1024 * 1024 * 1024) return `${(s/1024/1024).toFixed(2)} MB`
-  return `${(s/1024/1024/1024).toFixed(2)} GB`
+  if (s < 1024 * 1024) return `${(s / 1024).toFixed(1)} KB`
+  if (s < 1024 * 1024 * 1024) return `${(s / 1024 / 1024).toFixed(2)} MB`
+  return `${(s / 1024 / 1024 / 1024).toFixed(2)} GB`
 })
 const tooLargeHint = computed(() => {
   const s = props.file?.fileSize ?? 0
@@ -240,13 +249,13 @@ const saveText = async () => {
     const type = isMd.value ? 'text/markdown' : 'text/plain'
     const blob = new Blob([textContent.value], { type })
     const newFile = new File([blob], props.file.filename, { type })
-    await uploadFile(newFile, {
+    props.file.fileKey = await uploadFile(newFile, {
       folderId: props.currentFolderId ?? null,
       overwrite: true
     })
     originalContent.value = textContent.value
     // 重新加载以刷新预览（blob 不缓存直链）
-    await load()
+    //await load()
     emit('saved')
     // @ts-ignore
     if (typeof notify === 'function') notify('保存成功', 'success')
@@ -264,7 +273,7 @@ const handlePickReplacement = async (e: Event) => {
   try {
     error.value = ''
     const sameNameFile = new File([f], props.file.filename, { type: f.type || 'application/octet-stream' })
-    await uploadFile(sameNameFile, {
+    props.file.fileKey = await uploadFile(sameNameFile, {
       folderId: props.currentFolderId ?? null,
       overwrite: true
     })

@@ -29,7 +29,7 @@ interface UploadProgress {
 
 type UploadOptions = { folderId?: number | null; overwrite?: boolean; skip?:boolean; partOfBatch?: boolean; onProgressDelta?: (delta: number) => void }
 
-export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) => {
+export const useFileUpload = (options?: { targetUserId?: Ref<number | null | undefined> }) => {
   const tRef = options?.targetUserId
   const uploading = ref(false)
   const uploadProgress = ref<UploadProgress>({ loaded: 0, total: 0, percent: 0 })
@@ -66,7 +66,7 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
     return response.data
   }
 
-  const uploadFile = async (file: File, options2?: UploadOptions): Promise<undefined> => {
+  const uploadFile = async (file: File, options2?: UploadOptions): Promise<string> => {
     const partOfBatch = !!options2?.partOfBatch
     const folderId = options2?.folderId ?? null
     const overwrite = !!options2?.overwrite
@@ -100,7 +100,7 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
         }
         if (tRef?.value) body.targetUserId = tRef.value
         await $fetch('/api/files/save', { method: 'POST', body })
-        return
+        return config.fileKey
       }
 
       const cos = new COS({
@@ -150,7 +150,7 @@ export const useFileUpload = (options?: { targetUserId?: Ref<number | null> }) =
         await $fetch('/api/files/save', { method: 'POST', body })
       }
       //console.log(fileUrl)
-      return
+      return config.fileKey
     } catch (error: any) {
       /*
       if (skip === true)
