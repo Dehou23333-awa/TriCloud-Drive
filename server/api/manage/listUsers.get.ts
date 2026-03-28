@@ -1,6 +1,6 @@
 // server/api/manage/listUsers.get.ts
 import { defineEventHandler, getQuery } from 'h3';
-import { getDb } from '~/server/utils/db-adapter';
+import { getDb } from '~~/server/utils/db-adapter';
 
 // 定义用户接口
 interface User {

@@ -1,8 +1,8 @@
 // server/api/folders/rename.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
-import { getDb } from '~/server/utils/db-adapter'
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { normalizeFolderName } from '~/server/utils/folders'
+import { getDb } from '~~/server/utils/db-adapter'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { normalizeFolderName } from '~~/server/utils/folders'
 
 function isUniqueError(err: any) {
   return (

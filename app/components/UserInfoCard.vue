@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatToUTC8 } from '~/server/utils/time'
+import { formatToUTC8 } from '~~/server/utils/time'
 import { formatFileSize } from '~/utils/format'
 const { user } = useAuth()
 </script>

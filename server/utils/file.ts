@@ -1,7 +1,7 @@
-import { Database } from '~/server/utils/db'
-import { FileRecord } from '~/types/files'
-import { GeneralResponse } from '~/types/auth'
-import { skipAndOverwriteError, ServerError } from '~/types/error'
+import { Database } from '~~/server/utils/db'
+import { FileRecord } from '~~/types/files'
+import { GeneralResponse } from '~~/types/auth'
+import { skipAndOverwriteError, ServerError } from '~~/types/error'
 
 export function splitName(filename: string): { base: string, ext: string } {
     const i = filename.lastIndexOf('.')

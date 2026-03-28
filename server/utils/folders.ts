@@ -1,6 +1,6 @@
 // server/utils/folders.ts
 import { createError } from 'h3'
-import { Database } from '~/server/utils/db'
+import { Database } from '~~/server/utils/db'
 /*
 type DBLike = {
   prepare: (sql: string) => {

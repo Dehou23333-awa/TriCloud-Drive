@@ -1,7 +1,7 @@
 // server/folders/ensure-paths.post.ts
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
-import { ensurePaths } from '~/server/utils/folders'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
+import { ensurePaths } from '~~/server/utils/folders'
 
 export default defineEventHandler(async (event) => {
   try {

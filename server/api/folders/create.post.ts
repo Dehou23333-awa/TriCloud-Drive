@@ -1,7 +1,7 @@
 // server/api/folders/create.post.ts
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
-import { createFolder } from '~/server/utils/folders'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
+import { createFolder } from '~~/server/utils/folders'
 
 export default defineEventHandler(async (event) => {
   try {

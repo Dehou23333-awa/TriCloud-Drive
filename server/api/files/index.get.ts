@@ -1,6 +1,6 @@
 // server/api/files/index.get.ts
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
 import { getQuery } from 'h3'
 
 export default defineEventHandler(async (event) => {

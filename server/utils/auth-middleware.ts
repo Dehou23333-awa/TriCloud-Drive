@@ -1,7 +1,7 @@
 // server/utils/auth-middleware.ts
 import { getCookie } from 'h3'
 import { verifyToken } from './auth'
-import { getDb } from '~/server/utils/db-adapter'
+import { getDb } from '~~/server/utils/db-adapter'
 
 export interface AuthenticatedUser {
   userId: number

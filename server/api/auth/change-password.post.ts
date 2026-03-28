@@ -1,8 +1,8 @@
 // server/api/auth/change-password.post.ts
 import { readBody, createError } from 'h3'
-import { getDb } from '~/server/utils/db-adapter'
-import { requireAuth, getMeAndTarget } from '~/server/utils/auth-middleware'
-import { validatePassword, verifyPassword, hashPassword } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db-adapter'
+import { requireAuth, getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { validatePassword, verifyPassword, hashPassword } from '~~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
   //const user = await requireAuth(event, { withUser: true } )

@@ -1,7 +1,7 @@
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
 import crypto from 'crypto'
-import { UserService } from '~/server/utils/db'
+import { UserService } from '~~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
   // 处理 CORS 预检

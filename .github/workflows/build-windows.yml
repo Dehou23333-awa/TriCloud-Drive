@@ -1,4 +1,4 @@
-name: Build - Nuxt 3 (Windows artifact)
+name: Build - Nuxt 4 (Windows artifact)
 
 on:
   push:
@@ -16,10 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22.16.0
+      - name: Setup Node.js 22.22.1
         uses: actions/setup-node@v4
         with:
-          node-version: 22.16.0
+          node-version: 22.22.1
           cache: npm
 
       - name: Install dependencies

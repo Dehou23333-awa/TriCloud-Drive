@@ -135,7 +135,7 @@
 import { ref, computed, watch, toRef, onBeforeUnmount } from 'vue'
 import { FilesService } from '~/services/files.service'
 import { useFileUpload } from '~/composables/useFileUpload'
-import type { FileRecord } from '~/types/file-browser'
+import type { FileRecord } from '~~/types/file-browser'
 
 const props = defineProps<{
   file: FileRecord

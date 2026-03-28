@@ -1,6 +1,6 @@
 // server/api/folders/delete.post.ts
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
   try {

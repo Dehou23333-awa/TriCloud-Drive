@@ -1,6 +1,6 @@
-import { UserService } from '~/server/utils/db'
-import { hashPassword, validateEmail, validatePassword, validateUsername } from '~/server/utils/auth'
-import { getDb } from '~/server/utils/db-adapter'
+import { UserService } from '~~/server/utils/db'
+import { hashPassword, validateEmail, validatePassword, validateUsername } from '~~/server/utils/auth'
+import { getDb } from '~~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   if (getMethod(event) !== 'POST') {
     throw createError({

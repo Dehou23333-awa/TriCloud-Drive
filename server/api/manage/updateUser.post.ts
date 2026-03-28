@@ -1,6 +1,6 @@
 // server/api/manage/updateUser.post.ts
 import { getMethod, readBody } from 'h3'
-import { getDb } from '~/server/utils/db-adapter'
+import { getDb } from '~~/server/utils/db-adapter'
 
 export default defineEventHandler(async (event) => {
   if (getMethod(event) !== 'POST') {

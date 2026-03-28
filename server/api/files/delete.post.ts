@@ -1,5 +1,5 @@
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
 export default defineEventHandler(async (event) => {
   try {
     // 验证用户认证

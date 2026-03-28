@@ -60,5 +60,9 @@ export default defineNuxtConfig({
       exclude: ['@zip.js/zip.js']
       // 不要 include '@zip.js/zip.js'
     }
-  }
+  }/*,
+  
+    future: {
+    compatibilityVersion: 4,
+  }*/
 })

@@ -1,11 +1,11 @@
 import { defineEventHandler, readBody } from 'h3'
 import COS from 'cos-nodejs-sdk-v5'
 import { useRuntimeConfig } from '#imports'
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
-import { getDb } from '~/server/utils/db-adapter'
-import { ensurePaths } from '~/server/utils/folders'
-import { resolveUniqueFilename, recalculateUsedStorage } from '~/server/utils/file'
-import { skipAndOverwriteError } from '~/types/error'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
+import { ensurePaths } from '~~/server/utils/folders'
+import { resolveUniqueFilename, recalculateUsedStorage } from '~~/server/utils/file'
+import { skipAndOverwriteError } from '~~/types/error'
 
 function placeholders(n: number) {
   return Array(n).fill('?').join(',')

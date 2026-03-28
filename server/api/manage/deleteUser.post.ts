@@ -1,7 +1,7 @@
 // server/api/manage/deleteUser.post.ts
 import { defineEventHandler, readBody, createError, getMethod } from 'h3'
-import { getDb } from '~/server/utils/db-adapter'
-import { requireAuth } from '~/server/utils/auth-middleware'
+import { getDb } from '~~/server/utils/db-adapter'
+import { requireAuth } from '~~/server/utils/auth-middleware'
 
 function toBool(v: any) {
   return v === true || v === 1 || v === '1'

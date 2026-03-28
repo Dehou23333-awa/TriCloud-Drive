@@ -1,6 +1,6 @@
-import { getMeAndTarget } from '~/server/utils/auth-middleware'
+import { getMeAndTarget } from '~~/server/utils/auth-middleware'
 import crypto from 'crypto'
-import { getDb } from '~/server/utils/db-adapter'
+import { getDb } from '~~/server/utils/db-adapter'
 
 // 生成 CDN 鉴权 URL (TypeA)
 const generateCDNUrl = (
