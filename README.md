@@ -1,6 +1,8 @@
 # TriCloud Drive
 
-基于 Nuxt 3 ， Cloudflare D1/Sqlite3，腾讯云存储桶+CDN 的云存储应用，具备完整的用户认证功能。
+基于 Nuxt 4 ， Cloudflare D1/Sqlite3，腾讯云存储桶+CDN 的云存储应用，具备完整的用户认证功能。
+
+> # ⚠警告，本项目刚刚从Nuxt3 迁移到 Nuxt4 有不可预知的风险
 
 ## 功能特性
 
@@ -11,12 +13,12 @@
 - ✅ Cloudflare D1/ Sqlite3 数据库双兼容
 - ✅ 腾讯云存储桶+CDN 云存储
 - ✅ 用户下载和存储配额
-- 🚧 管理（开发中）
+- 🚧 管理（还需完善）
 - ✅ 文件上传下载
 
 ## 技术栈
 
-- **前端**: Nuxt 3, Vue 3, TailwindCSS
+- **前端**: Nuxt 4, Vue 3, TailwindCSS
 - **后端**: Nitro, Cloudflare Workers
 - **数据库**: Cloudflare D1 (SQLite)/Sqlite3
 - **认证**: JWT, bcrypt
@@ -79,7 +81,7 @@ https://github.com/Dehou23333-awa/TriCloud-Drive/actions
 
 ### 2、安装nodejs
 
-> 建议安装node v22.20.0 , 我们的编译统一使用这个版本
+> 建议安装node v22.22.1 , 我们的编译统一使用这个版本
 
 ```
 node -v
@@ -157,8 +159,10 @@ pm2 start ./start.sh --name "Tricloud-drive"
 
 > 用户注册时 `IsAdmin` 和 `IsSuperAdmin` 默认为 `false` 。管理员请手动修改数据库。之后就可以在管理页面修改其他用户权限。
 
+> ## ⚠警告：Admin 和 SuperAdmin权限划分还需要调整，非必要 **不要** 给Admin，只给普通用户权限就行了。
 
-## 部署到 Cloudflare(待完善)
+
+## 部署到 Cloudflare **(待完善)**
 
 ### 1. 创建 D1 数据库
 
